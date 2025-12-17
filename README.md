@@ -30,5 +30,3 @@ choose to upload an image
 Click Launch Detection,the output should look like this
 ![22](https://user-images.githubusercontent.com/24214295/148831389-abd4ec11-ddd6-442e-a5a9-6823b32d5f92.png)
 You can also choose to upload a pdf and repeat the same steps.
-
-  
