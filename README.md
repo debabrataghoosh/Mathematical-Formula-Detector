@@ -10,12 +10,32 @@ This project provides an end-to-end system that automatically detects and extrac
 
 ## 🤖 Model
 
-We propose an end-to-end system that takes a picture of a printed document and outputs the locations of math formulas in the image. In our project, we use:
+### Architecture Overview
+We propose an end-to-end system that automatically detects and extracts mathematical formulas from printed documents using a two-stage pipeline:
 
-- **YOLOv5**: Pre-trained feature extractor and detector for formula localization
-- **Transformer-based Recognizer**: Custom model (MathRecog.pth) for LaTeX formula recognition
-- **Detection Thresholds**: Confidence: 0.32, NMS: 0.75 (optimized for accurate detection without duplicates)
-- **Post-processing**: Aggressive duplicate removal with IoU threshold of 0.3
+#### Stage 1: Formula Detection
+- **Model**: YOLOv5 (TorchScript format: `MathDetector.ts`)
+- **Input**: Document image (preprocessed to 640×640)
+- **Output**: Bounding boxes with confidence scores for detected formulas
+- **Optimization**: 
+  - Confidence threshold: **0.32** (catches weak formulas like edges/partial content)
+  - NMS threshold: **0.75** (aggressively merges overlapping boxes)
+  - Post-processing: **IoU-based duplicate removal** (0.3 threshold) for clean, single-box-per-formula detections
+
+#### Stage 2: Formula Recognition
+- **Model**: Transformer-based recognizer (`MathRecog.pth`)
+- **Input**: Individual formula crop images
+- **Output**: LaTeX representation of each formula
+- **Features**:
+  - Custom tokenizer for mathematical notation (`tokenizer.json`)
+  - Error handling with fallback mechanism
+  - Batch processing support for multiple formulas
+
+### Key Improvements Over Baseline
+✅ **Duplicate Elimination**: Advanced post-processing removes false duplicates while maintaining detection accuracy  
+✅ **Optimized Thresholds**: Fine-tuned parameters for balanced sensitivity (catches all formulas) vs. specificity (no false positives)  
+✅ **Single-Page Export**: Generates consolidated PDF with all detections visible on one page  
+✅ **Robust Error Handling**: Gracefully handles unrecognizable formulas with fallback LaTeX
 
 ---
 
