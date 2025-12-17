@@ -200,8 +200,8 @@ def predict_formulas(img, model):
 
     # Inference model
     pred = model(mod_img)[0]
-    # Apply NMS
-    pred = non_max_suppression(pred, 0.5, 0.45)
+    # Apply NMS for clean detections (high threshold to merge duplicates)
+    pred = non_max_suppression(pred, 0.32, 0.75)
     
     bboxes = []
     
@@ -211,9 +211,80 @@ def predict_formulas(img, model):
             det[:, :4] = scale_coords(mod_img.shape[2:], det[:, :4], img.shape).round()
             # Write results
             for *xyxy, conf, cls in reversed(det):
-                if conf < 0.5 or int(cls.item()) != 0:
+                if conf < 0.32 or int(cls.item()) != 0:
                     continue
                 bboxes.append([xyxy[0].item(),xyxy[1].item(),xyxy[2].item(),xyxy[3].item(),conf.item(), cls.item()])
+    
+    # Post-process: Remove duplicates with aggressive overlap filtering
+    bboxes = remove_duplicate_boxes(bboxes, iou_threshold=0.3)
+    
     return bboxes
+
+
+def remove_duplicate_boxes(bboxes, iou_threshold=0.3):
+    '''
+    Description:
+        Remove duplicate/overlapping bounding boxes after NMS
+    Parameters:
+    Inputs:
+        bboxes: (list) containing bounding boxes [x1, y1, x2, y2, conf, cls]
+        iou_threshold: (float) IoU threshold to consider boxes as duplicates
+    Outputs:
+        filtered_bboxes: (list) filtered bounding boxes
+    '''
+    if len(bboxes) == 0:
+        return bboxes
+    
+    # Sort by confidence score (descending)
+    bboxes_sorted = sorted(bboxes, key=lambda x: x[4], reverse=True)
+    filtered_bboxes = []
+    
+    for bbox in bboxes_sorted:
+        is_duplicate = False
+        for existing_bbox in filtered_bboxes:
+            iou = calculate_iou(bbox, existing_bbox)
+            if iou > iou_threshold:
+                is_duplicate = True
+                break
+        if not is_duplicate:
+            filtered_bboxes.append(bbox)
+    
+    return filtered_bboxes
+
+
+def calculate_iou(box1, box2):
+    '''
+    Description:
+        Calculate Intersection over Union between two boxes
+    Parameters:
+    Inputs:
+        box1, box2: (list) bounding boxes [x1, y1, x2, y2, conf, cls]
+    Outputs:
+        iou: (float) IoU value
+    '''
+    x1_min, y1_min, x1_max, y1_max = box1[0], box1[1], box1[2], box1[3]
+    x2_min, y2_min, x2_max, y2_max = box2[0], box2[1], box2[2], box2[3]
+    
+    # Calculate intersection
+    inter_xmin = max(x1_min, x2_min)
+    inter_ymin = max(y1_min, y2_min)
+    inter_xmax = min(x1_max, x2_max)
+    inter_ymax = min(y1_max, y2_max)
+    
+    if inter_xmax < inter_xmin or inter_ymax < inter_ymin:
+        return 0.0
+    
+    inter_area = (inter_xmax - inter_xmin) * (inter_ymax - inter_ymin)
+    
+    # Calculate union
+    box1_area = (x1_max - x1_min) * (y1_max - y1_min)
+    box2_area = (x2_max - x2_min) * (y2_max - y2_min)
+    union_area = box1_area + box2_area - inter_area
+    
+    if union_area == 0:
+        return 0.0
+    
+    iou = inter_area / union_area
+    return iou
 
 

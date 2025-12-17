@@ -45,6 +45,12 @@ if __name__ == '__main__':
         st.session_state.extracted_crops = None
     if 'output_dir' not in st.session_state:
         st.session_state.output_dir = None
+    if 'detection_done' not in st.session_state:
+        st.session_state.detection_done = False
+    if 'results_boxes' not in st.session_state:
+        st.session_state.results_boxes = None
+    if 'opencv_image' not in st.session_state:
+        st.session_state.opencv_image = None
     
     math_model = MD.initialize_model("./Models/MathDetector.ts")
     mathargs, *mathobjs = RM.initialize()
@@ -62,14 +68,25 @@ if __name__ == '__main__':
                 st.warning("attempt to clear uploaded_file")
                 uploaded_file.seek(0)
             with st.spinner(text='In progress'):
-                st.sidebar.image(uploaded_file)
+                # Read once and render from decoded array to avoid stale file refs
                 file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
                 opencv_image = cv2.imdecode(file_bytes, 1)
+                preview_image = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2RGB)
+                st.sidebar.image(preview_image)
+                
+                # Store image in session for later use
+                st.session_state.opencv_image = opencv_image
 
                 if st.button('Launch the Detection!'):
-                    results_boxes = MD.predict_formulas(opencv_image,math_model)
-                    images_rectangles = cv2.imdecode(file_bytes, 1)
-                    draw_rectangles(images_rectangles,results_boxes)
+                    results_boxes = MD.predict_formulas(opencv_image, math_model)
+                    st.session_state.results_boxes = results_boxes
+                    st.session_state.detection_done = True
+                
+                # Show detection result if detection was done
+                if st.session_state.detection_done and st.session_state.results_boxes is not None:
+                    results_boxes = st.session_state.results_boxes
+                    images_rectangles = st.session_state.opencv_image.copy()
+                    draw_rectangles(images_rectangles, results_boxes)
                     st.image(images_rectangles)
                     
                     # Add extraction option
@@ -89,7 +106,7 @@ if __name__ == '__main__':
                                     os.makedirs(output_dir, exist_ok=True)
                                     
                                     # Extract formula crops
-                                    st.session_state.extracted_crops = FE.extract_formula_crops(opencv_image, results_boxes)
+                                    st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
                                     
                                     # Recognize formulas
                                     st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
@@ -98,21 +115,13 @@ if __name__ == '__main__':
                                     formulas = st.session_state.extracted_formulas
                                     extracted_crops = st.session_state.extracted_crops
                                     
-                                    # Save JSON
-                                    json_path = os.path.join(output_dir, 'extracted_formulas.json')
-                                    FE.save_formulas_to_json(formulas, json_path)
-                                    
-                                    # Save CSV
-                                    csv_path = os.path.join(output_dir, 'extracted_formulas.csv')
-                                    FE.save_formulas_to_csv(formulas, csv_path)
-                                    
-                                    # Save HTML Report
-                                    html_path = os.path.join(output_dir, 'formulas_report.html')
-                                    FE.save_html_report(formulas, output_path=html_path)
+                                    # Save consolidated PDF Report
+                                    pdf_path = os.path.join(output_dir, 'formulas_report.pdf')
+                                    FE.save_pdf_report(formulas, extracted_crops=extracted_crops, output_path=pdf_path, original_image=st.session_state.opencv_image)
                                     
                                     # Save Annotated Image
                                     annotated_path = os.path.join(output_dir, 'annotated_image.png')
-                                    FE.save_annotated_image(opencv_image, formulas, annotated_path)
+                                    FE.save_annotated_image(st.session_state.opencv_image, formulas, annotated_path)
                                     
                                     # Save individual formula images
                                     formula_dir = os.path.join(output_dir, 'formula_images')
@@ -141,7 +150,7 @@ if __name__ == '__main__':
                             if st.button("👁️ View Extracted Formulas"):
                                 with st.spinner("Extracting and recognizing formulas..."):
                                     # Extract formula crops
-                                    st.session_state.extracted_crops = FE.extract_formula_crops(opencv_image, results_boxes)
+                                    st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
                                     
                                     # Recognize formulas
                                     st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
@@ -159,46 +168,22 @@ if __name__ == '__main__':
                                 # Export options in columns
                                 st.subheader("📥 Download Extracted Formulas")
                                 
-                                dl_col1, dl_col2, dl_col3, dl_col4 = st.columns(4)
+                                dl_col1, dl_col2 = st.columns(2)
                                 
-                                # JSON Download
+                                # PDF Report Download
                                 with dl_col1:
-                                    json_file = os.path.join(output_dir, 'extracted_formulas.json')
-                                    if os.path.exists(json_file):
-                                        with open(json_file, 'rb') as f:
+                                    pdf_file = os.path.join(output_dir, 'formulas_report.pdf')
+                                    if os.path.exists(pdf_file):
+                                        with open(pdf_file, 'rb') as f:
                                             st.download_button(
-                                                label="📊 JSON",
+                                                label="📄 PDF",
                                                 data=f.read(),
-                                                file_name="extracted_formulas.json",
-                                                mime="application/json"
-                                            )
-                                
-                                # CSV Download
-                                with dl_col2:
-                                    csv_file = os.path.join(output_dir, 'extracted_formulas.csv')
-                                    if os.path.exists(csv_file):
-                                        with open(csv_file, 'rb') as f:
-                                            st.download_button(
-                                                label="📋 CSV",
-                                                data=f.read(),
-                                                file_name="extracted_formulas.csv",
-                                                mime="text/csv"
-                                            )
-                                
-                                # HTML Report Download
-                                with dl_col3:
-                                    html_file = os.path.join(output_dir, 'formulas_report.html')
-                                    if os.path.exists(html_file):
-                                        with open(html_file, 'rb') as f:
-                                            st.download_button(
-                                                label="📄 HTML",
-                                                data=f.read(),
-                                                file_name="formulas_report.html",
-                                                mime="text/html"
+                                                file_name="formulas_report.pdf",
+                                                mime="application/pdf"
                                             )
                                 
                                 # ZIP Download
-                                with dl_col4:
+                                with dl_col2:
                                     zip_file = os.path.join(output_dir, 'extracted_formulas.zip')
                                     if os.path.exists(zip_file):
                                         with open(zip_file, 'rb') as f:
@@ -225,7 +210,7 @@ if __name__ == '__main__':
                                         with exp_col1:
                                             st.write("**Formula Image:**")
                                             coords = formula['coordinates']
-                                            crop_img = opencv_image[coords[1]:coords[3], coords[0]:coords[2]]
+                                            crop_img = st.session_state.opencv_image[coords[1]:coords[3], coords[0]:coords[2]]
                                             st.image(crop_img, use_column_width=True)
                                         
                                         with exp_col2:

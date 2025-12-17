@@ -10,6 +10,17 @@ from datetime import datetime
 from PIL import Image
 import numpy as np
 import cv2
+import io
+from fpdf import FPDF
+
+
+def _chunk_text_for_pdf(text: str, chunk_size: int = 80) -> str:
+    """Insert spaces every `chunk_size` characters to allow fpdf2 to wrap long tokens.
+    Avoids FPDFException when content has no spaces (e.g., long LaTeX strings)."""
+    if not isinstance(text, str):
+        text = str(text)
+    chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+    return " ".join(chunks)
 
 
 def extract_formula_crops(image, bboxes):
@@ -270,4 +281,72 @@ def save_html_report(formulas, image_path=None, output_path='formulas_report.htm
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     
+    return output_path
+
+
+def save_pdf_report(formulas, extracted_crops=None, output_path='formulas_report.pdf', original_image=None):
+    """
+    Create a single-page PDF that matches the detected page view with all boxes visible.
+
+    Parameters:
+        formulas: list of recognized formula dictionaries
+        extracted_crops: list of extracted crop dictionaries (unused here but kept for API compatibility)
+        output_path: path to save PDF file
+        original_image: numpy image (BGR) of the page to embed with boxes
+    """
+    pdf = FPDF(format='A4', orientation='P')
+    pdf.set_auto_page_break(auto=False, margin=5)
+    pdf.add_page()
+
+    # If original image is provided, draw boxes and embed as a single page
+    if original_image is not None:
+        annotated = original_image.copy()
+        # Draw red boxes like the UI view
+        for f in formulas:
+            x1, y1, x2, y2 = map(int, f['coordinates'])
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+        # Convert to RGB PIL image for FPDF
+        annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(annotated_rgb)
+        buf = io.BytesIO()
+        pil_img.save(buf, format='PNG')
+        buf.seek(0)
+
+        # Fit image to page width while keeping aspect ratio
+        page_w = pdf.w - 10  # margin already set to 5 each side
+        page_h = pdf.h - 10
+        img_w, img_h = pil_img.size
+        scale = min(page_w / img_w, page_h / img_h)
+        render_w = img_w * scale
+        render_h = img_h * scale
+
+        # Center the image
+        x = (pdf.w - render_w) / 2
+        y = (pdf.h - render_h) / 2
+        pdf.image(buf, x=x, y=y, w=render_w, h=render_h)
+    else:
+        # Fallback: simple table if no image passed
+        pdf.set_font('Arial', 'B', 12)
+        pdf.cell(0, 10, 'Mathematical Formula Extraction Report', ln=True)
+        pdf.set_font('Arial', '', 10)
+        pdf.cell(0, 8, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Total Formulas: {len(formulas)}", ln=True)
+        pdf.ln(4)
+
+        pdf.set_font('Arial', 'B', 9)
+        pdf.cell(10, 7, 'ID', 1)
+        pdf.cell(40, 7, 'Coords', 1)
+        pdf.cell(120, 7, 'LaTeX', 1)
+        pdf.cell(20, 7, 'Conf', 1, ln=True)
+        pdf.set_font('Arial', '', 8)
+        for f in formulas:
+            coords = f['coordinates']
+            coords_str = f"({coords[0]}, {coords[1]}, {coords[2]}, {coords[3]})"
+            latex_summary = (f['latex'][:60] + '...') if len(f['latex']) > 60 else f['latex']
+            pdf.cell(10, 6, str(f['id']), 1)
+            pdf.cell(40, 6, coords_str, 1)
+            pdf.cell(120, 6, latex_summary, 1)
+            pdf.cell(20, 6, f"{f['confidence']:.3f}", 1, ln=True)
+
+    pdf.output(output_path)
     return output_path
