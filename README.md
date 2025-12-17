@@ -151,15 +151,13 @@ Two download options:
 
 ## 🎬 Demo Clips
 
-### 1️⃣ View Extracted Formulas
-Expandable formula details showing:
-- Formula crop image from original document
-- Recognized LaTeX equation
-- Rendered formula preview
-- Bounding box coordinates
-- Confidence score
+### 1️⃣ Formula Detection
+The app detects all visible formulas and displays them with red bounding boxes:
+- All formulas detected with clean boxes (no duplicates)
+- Confidence scores shown for each detection
+- Ready for extraction
 
-![View Extracted Formulas Demo](screenshots/view-extracted-formulas.jpeg)
+![Formula Detection Demo](screenshots/formula-detection.jpeg)
 
 ### 2️⃣ Extraction & Download
 After clicking "Extract Formulas to File":
@@ -170,13 +168,15 @@ After clicking "Extract Formulas to File":
 
 ![Extraction Download Demo](screenshots/extraction-download.jpeg)
 
-### 3️⃣ Formula Detection
-The app detects all visible formulas and displays them with red bounding boxes:
-- All formulas detected with clean boxes (no duplicates)
-- Confidence scores shown for each detection
-- Ready for extraction
+### 3️⃣ View Extracted Formulas
+Expandable formula details showing:
+- Formula crop image from original document
+- Recognized LaTeX equation
+- Rendered formula preview
+- Bounding box coordinates
+- Confidence score
 
-![Formula Detection Demo](screenshots/formula-detection.jpeg)
+![View Extracted Formulas Demo](screenshots/view-extracted-formulas.jpeg)
 
 ---
 
