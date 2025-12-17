@@ -179,16 +179,7 @@ The app detects all visible formulas and displays them with red bounding boxes:
 
 ![Formula Detection Demo](screenshots/formula-detection.jpeg)
 
-### 2️⃣ Extraction & Download
-After clicking "Extract Formulas to File":
-- Green success message confirming extraction count
-- File directory location displayed
-- Download buttons for PDF and ZIP formats
-- Complete extraction with all metadata
-
-![Extraction Download Demo](screenshots/extraction-download.jpeg)
-
-### 3️⃣ View Extracted Formulas
+### 2️⃣ View Extracted Formulas
 Expandable formula details showing:
 - Formula crop image from original document
 - Recognized LaTeX equation
@@ -197,6 +188,15 @@ Expandable formula details showing:
 - Confidence score
 
 ![View Extracted Formulas Demo](screenshots/view-extracted-formulas.jpeg)
+
+### 3️⃣ Extraction & Download
+After clicking "Extract Formulas to File":
+- Green success message confirming extraction count
+- File directory location displayed
+- Download buttons for PDF and ZIP formats
+- Complete extraction with all metadata
+
+![Extraction Download Demo](screenshots/extraction-download.jpeg)
 
 ---
 
