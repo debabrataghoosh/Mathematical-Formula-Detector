@@ -23,6 +23,8 @@ def _chunk_text_for_pdf(text: str, chunk_size: int = 80) -> str:
     return " ".join(chunks)
 
 
+
+
 def extract_formula_crops(image, bboxes):
     """
     Extract individual formula regions from the image based on bounding boxes
@@ -65,6 +67,16 @@ def recognize_formulas(extracted_crops, model_args, model_objs):
         crop_img = Image.fromarray(np.uint8(crop_data['image']))
         try:
             latex_pred = RM.call_model(model_args, *model_objs, img=crop_img)
+
+            # Fallback: pix2tex if installed
+            if not isinstance(latex_pred, str) or latex_pred.strip() in {"", "ERROR", "[Unrecognized]"}:
+                try:
+                    from pix2tex.cli import LatexOCR
+                    pix_model = LatexOCR()
+                    latex_pred = pix_model(crop_img)
+                except Exception:
+                    pass
+
             formulas.append({
                 'id': idx + 1,
                 'bbox': crop_data['bbox'],
@@ -78,7 +90,7 @@ def recognize_formulas(extracted_crops, model_args, model_objs):
                 'id': idx + 1,
                 'bbox': crop_data['bbox'],
                 'coordinates': crop_data['coordinates'],
-                'latex': 'ERROR',
+                'latex': '[Unrecognized]',
                 'confidence': crop_data['bbox'][4]
             })
     

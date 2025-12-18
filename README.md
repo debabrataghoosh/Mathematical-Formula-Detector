@@ -4,7 +4,7 @@ As large amounts of technical documents have been published in recent years, eff
 
 ## 📋 Overview
 
-This project provides an end-to-end system that automatically detects and extracts mathematical formulas from printed documents. It combines YOLOv5-based object detection with formula recognition to identify formula locations and generate their LaTeX representations.
+This project provides an end-to-end system that automatically detects and extracts mathematical formulas from images **and PDFs**. It combines a YOLOv5-based detector with a transformer recognizer (plus an optional pix2tex local fallback) to locate formulas and generate LaTeX.
 
 ---
 
@@ -28,14 +28,17 @@ We propose an end-to-end system that automatically detects and extracts mathemat
 - **Output**: LaTeX representation of each formula
 - **Features**:
   - Custom tokenizer for mathematical notation (`tokenizer.json`)
-  - Error handling with fallback mechanism
-  - Batch processing support for multiple formulas
+  - Error handling with local fallback to pix2tex (no external APIs)
+  - Safe placeholder (`[Unrecognized]`) if all recognizers fail
+  - Batch-friendly processing
 
 ### Key Improvements Over Baseline
 ✅ **High Precision (94.3%)**: Detected formulas are reliable and accurate  
 ✅ **Strong Recall (91.2%)**: Catches 91% of all visible formulas in documents  
 ✅ **Advanced Duplicate Removal**: IoU-based post-processing (0.3 threshold) ensures single clean box per formula  
 ✅ **Single-Page PDF Export**: All detections on one annotated page for easy review  
+✅ **PDF Parity**: PDF uploads now support detection, extraction, LaTeX recognition, and downloads (PDF/ZIP) just like images  
+✅ **Modern UI**: Updated Streamlit styling and centered LaTeX rendering for cleaner presentation  
 ✅ **Configurable Thresholds**: Adjust parameters to optimize for specific document types
 
 ---
@@ -68,40 +71,32 @@ Data is collected from ICDAR competition for 2019 and 2021.
 ## 📁 Project Structure
 
 ```
-MathFormApp-main/
-├── app.py                           # Main Streamlit web interface
-├── Inference_Math_Detection.py      # YOLOv5 detection pipeline with NMS and duplicate removal
-├── Recog_MathForm.py               # Formula recognition (LaTeX generation)
-├── formula_extraction.py            # Formula extraction and export utilities
+Math-Formula-Detection/
+├── app.py                           # Streamlit UI (Image + PDF parity)
+├── Inference_Math_Detection.py      # YOLOv5 detection pipeline with NMS & duplicate removal
+├── Recog_MathForm.py                # Formula recognition (LaTeX generation + fallbacks)
+├── formula_extraction.py            # Extraction, exports (PDF/ZIP), LaTeX rendering helpers
 ├── models.py                        # Model definitions
 ├── requirements.txt                 # Python dependencies
-├── packages.txt                     # System-level dependencies (Linux)
+├── packages.txt                     # System-level dependencies (Linux/macOS notes)
 ├── README.md                        # This file
 │
 ├── Models/                          # Pre-trained model weights
-│   ├── MathDetector.ts             # YOLOv5 detector (TorchScript)
-│   ├── MathRecog.pth               # Formula recognizer checkpoint
-│   ├── tokenizer.json              # Tokenizer for LaTeX generation
-│   └── config.yaml                 # Model configuration
+│   ├── MathDetector.ts              # YOLOv5 detector (TorchScript)
+│   ├── MathRecog.pth                # Formula recognizer checkpoint
+│   ├── tokenizer.json               # Tokenizer for LaTeX generation
+│   └── config.yaml                  # Model configuration
 │
-├── ICDAR2019/                      # Dataset (2019)
-│   ├── images/
-│   │   ├── train/
-│   │   └── test/
+├── ICDAR2019/                       # Dataset (2019)
+│   └── labels/                      # Labels (images not bundled)
+├── ICDAR2021/                       # Dataset (2021)
 │   └── labels/
 │
-├── ICDAR2021/                      # Dataset (2021)
-│   ├── images/
-│   │   ├── train/
-│   │   ├── test/
-│   │   └── validation/
-│   └── labels/
-│
-└── extracted_output_*/             # Generated extraction outputs (timestamped)
-    ├── formulas_report.pdf         # Single-page annotated PDF with all formulas
-    ├── extracted_formulas.zip      # Complete package with all results
-    ├── formula_images/             # Individual formula crop images
-    └── annotated_image.png         # Original image with detection boxes
+└── extracted_output_*/              # Generated extraction outputs (timestamped)
+  ├── formulas_report.pdf          # Single-page annotated PDF with all formulas
+  ├── extracted_formulas.zip       # Complete package with all results
+  ├── formula_images/              # Individual formula crop images
+  └── annotated_image.png          # Original image with detection boxes
 ```
 
 ---
@@ -109,7 +104,7 @@ MathFormApp-main/
 ## ⚙️ Installation & Setup
 
 ### Prerequisites
-- Python 3.8 or higher
+- Python 3.10 (tested) or higher
 - pip (Python package manager)
 - Git (for cloning repository)
 - CUDA (optional, for GPU acceleration)
@@ -117,7 +112,7 @@ MathFormApp-main/
 ### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/Subhajyoti-Maity/Math-Formula-Detection.git
-cd Math-Formula-Detection/MathFormApp-main
+cd Math-Formula-Detection
 ```
 
 ### Step 2: Create Virtual Environment (Recommended)
@@ -137,7 +132,9 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Step 4: Install System Dependencies (Linux/WSL only)
+### Step 4: Install System Dependencies
+- **macOS**: `brew install poppler`
+- **Linux/WSL**:
 ```bash
 sudo apt-get update
 sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev poppler-utils
@@ -148,7 +145,7 @@ sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-
 streamlit run app.py
 ```
 
-The app will automatically open in your browser at: **http://localhost:8501**
+The app will open in your browser (default: **http://localhost:8501**; use `--server.port 8503` if the port is busy).
 
 **Note**: Models will auto-download on first run (~1-2 minutes). Ensure stable internet connection.
 
@@ -167,27 +164,24 @@ The app opens with a clean interface for image upload and inference selection:
 - **Upload Section**: Drag-and-drop or browse to select your document image
 
 ### Step 2: Launch Detection
-Click the **"Launch the Detection!"** button to run the formula detection model:
-- Displays the original image with red bounding boxes around detected formulas
-- Shows total formula count in green success message
-- Confidence scores and box coordinates are calculated
+Click **"Launch the Detection!"** to run the detector:
+- Displays the page/image with red bounding boxes
+- Shows total formula count and confidence per box
+- Works for both Image and PDF modes (select page for PDFs)
 
 ### Step 3: Extract Formulas
 Two options are available:
 
 **Option A: Extract Formulas to File**
-- Automatically extracts all detected formula regions
-- Recognizes LaTeX for each formula
+- Extracts all detected regions and recognizes LaTeX (primary model + pix2tex fallback)
 - Generates outputs:
-  - `formulas_report.pdf`: Single-page PDF with annotated image and formula thumbnails
-  - `extracted_formulas.zip`: Complete package with all extracted data
-  - Individual formula images in `formula_images/` folder
+  - `formulas_report.pdf`: Single-page PDF with annotated page and boxes
+  - `extracted_formulas.zip`: PDF, annotated image, crops, and metadata
+  - `formula_images/`: Individual crops
 
 **Option B: View Extracted Formulas**
-- Displays an expandable list of all formulas
-- Shows formula crop image for each detection
-- Displays recognized LaTeX and rendered formula preview
-- Includes bounding box coordinates and confidence scores
+- Expandable list with crop preview, LaTeX, centered render, bbox, confidence
+- Works for both Image and PDF inputs
 
 ### Step 4: Download Results
 Two download options:
@@ -248,7 +242,7 @@ Adjust these values in `predict_formulas()` function if needed for different doc
 ## 📦 Output Formats
 
 ### PDF Report
-- Single-page annotated view of the original image
+- Single-page annotated view of the selected page/image
 - All detected formulas highlighted with red bounding boxes
 - Optimized for printing and archival
 
@@ -264,28 +258,31 @@ Adjust these values in `predict_formulas()` function if needed for different doc
 
 | Issue | Solution |
 |-------|----------|
-| Port 8501 already in use | Change port: `streamlit run app.py --server.port 8502` |
-| Model weights not found | Models auto-download on first run from Google Drive |
-| OpenCV import error | Install: `pip install opencv-python-headless` |
-| PDF generation fails | Ensure fpdf2==2.7.9 is installed |
+| Port busy | Change port: `streamlit run app.py --server.port 8503` |
+| Model weights not found | Models auto-download on first run (keep internet on) |
+| OpenCV import error | `pip install opencv-python-headless` |
+| PDF generation fails | Ensure `fpdf2` and `poppler` are installed |
 
 ---
 
 ## 📝 Requirements
 
-### Python Packages
-- `streamlit==1.3.0` - Web framework
-- `torch==1.10.1` - Deep learning
-- `torchvision==0.11.2` - Computer vision
-- `opencv-python-headless` - Image processing
-- `transformers==4.45.0` - NLP models
-- `fpdf2==2.7.9` - PDF generation
-- `pdf2image==1.16.0` - PDF handling
+### Python Packages (key pins)
+- `streamlit` (UI)
+- `torch==2.5.1`, `torchvision==0.20.1`
+- `opencv-python-headless`
+- `transformers`
+- `albumentations==1.2.1`
+- `timm==1.0.11`
+- `x-transformers`, `einops`
+- `pdf2image`
+- `fpdf2`
+- `protobuf==3.20.3`
+- Optional: `pix2tex` for local OCR fallback
 
-### System Packages (Linux)
-- `libgl1-mesa-glx` - OpenGL support
-- `libglib2.0-0` - Graphics library
-- `poppler-utils` - PDF utilities
+### System Packages
+- `poppler-utils` / `poppler` (for PDF conversion)
+- `libgl1-mesa-glx`, `libglib2.0-0`, `libsm6`, `libxext6`, `libxrender-dev` (Linux)
 
 ---
 

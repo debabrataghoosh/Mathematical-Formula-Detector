@@ -69,18 +69,31 @@ def pad(img: Image, divable=32):
         data[..., 0] = 255-data[..., 0]
 
     coords = cv2.findNonZero(gray)  # Find all non-zero points (text)
-    a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
-    rect = data[b:b+h, a:a+w]
-    if rect[..., -1].var() == 0:
-        im = Image.fromarray((rect[..., 0]).astype(np.uint8)).convert('L')
-    else:
-        im = Image.fromarray((255-rect[..., -1]).astype(np.uint8)).convert('L')
+    try:
+        a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
+        rect = data[b:b+h, a:a+w]
+        if rect[..., -1].var() == 0:
+            im = Image.fromarray((rect[..., 0]).astype(np.uint8)).convert('L')
+        else:
+            im = Image.fromarray((255-rect[..., -1]).astype(np.uint8)).convert('L')
+        target_wh = (w, h)
+    except Exception:
+        # Fallback: if no non-zero points, use the original grayscale image
+        im = Image.fromarray((data[..., 0]).astype(np.uint8)).convert('L')
+        target_wh = im.size
+
+    # Compute next divisible dims safely
     dims = []
-    for x in [w, h]:
+    for x in target_wh:
         div, mod = divmod(x, divable)
         dims.append(divable*(div + (1 if mod > 0 else 0)))
     padded = Image.new('L', dims, 255)
-    padded.paste(im, im.getbbox())
+    # Paste at top-left if bbox is unavailable
+    try:
+        bbox = im.getbbox() or (0, 0, im.size[0], im.size[1])
+        padded.paste(im, bbox)
+    except Exception:
+        padded.paste(im, (0, 0))
     return padded
 
 
@@ -149,12 +162,19 @@ def call_model(args, model, tokenizer, img=None):
     t = test_transform(image=img)['image'][:1].unsqueeze(0)
     im = t.to("cpu")
 
-    with torch.no_grad():
-        model.eval()
-        device = args.device
-        encoded = encoder(im.to(device))
-        dec = decoder.generate(torch.LongTensor([args.bos_token])[:, None].to(device), args.max_seq_len,
-                               eos_token=args.eos_token, context=encoded.detach(), temperature=args.get('temperature', .25))
-        pred = post_process(token2str(dec, tokenizer)[0])
-    return pred
+    try:
+        with torch.no_grad():
+            model.eval()
+            device = args.device
+            encoded = encoder(im.to(device))
+            dec = decoder.generate(torch.LongTensor([args.bos_token])[:, None].to(device), args.max_seq_len,
+                                   eos_token=args.eos_token, context=encoded.detach(), temperature=args.get('temperature', .25))
+            pred = post_process(token2str(dec, tokenizer)[0])
+        # Guard against empty or obviously invalid outputs
+        if not isinstance(pred, str) or pred.strip() == "":
+            return "[Unrecognized]"
+        return pred
+    except Exception:
+        # Robust fallback to avoid crashing UI
+        return "[Unrecognized]"
 
