@@ -198,7 +198,7 @@ The app detects all visible formulas and displays them with red bounding boxes:
 - Confidence scores shown for each detection
 - Ready for extraction
 
-![Formula Detection Demo](screenshots/formula-detection.jpeg)
+![Formula Detection Demo](screenshots/formula-detection.png)
 
 ### 2️⃣ View Extracted Formulas
 Expandable formula details showing:
@@ -208,7 +208,7 @@ Expandable formula details showing:
 - Bounding box coordinates
 - Confidence score
 
-![View Extracted Formulas Demo](screenshots/view-extracted-formulas.jpeg)
+![View Extracted Formulas Demo](screenshots/view-extracted-formulas.png)
 
 ### 3️⃣ Extraction & Download
 After clicking "Extract Formulas to File":
@@ -217,7 +217,7 @@ After clicking "Extract Formulas to File":
 - Download buttons for PDF and ZIP formats
 - Complete extraction with all metadata
 
-![Extraction Download Demo](screenshots/extraction-download.jpeg)
+![Extraction Download Demo](screenshots/extraction-download.png)
 
 ---
 
