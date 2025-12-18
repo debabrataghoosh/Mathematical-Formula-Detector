@@ -70,7 +70,240 @@ Data is collected from ICDAR competition for 2019 and 2021.
 
 ## 📁 Project Structure
 
+# Math Formula Detection
+
+As large amounts of technical documents have been published in recent years, efficiently retrieving relevant documents and identifying locations of targeted terms are urgently needed.
+
+## 📋 Overview
+
+This project provides an end-to-end system that automatically detects and extracts mathematical formulas from images and PDFs. It combines a YOLOv5-based detector with a transformer recognizer (plus an optional pix2tex local fallback) to locate formulas and generate LaTeX.
+
+AI assistance (optional, recommended) uses Gemini to:
+- Generate a concise, reader-friendly description for each formula.
+- Produce clean LaTeX directly from the formula image when the recognizer output is empty/invalid.
+- Improve rendering reliability via normalization of non-standard macros (e.g., `\cal`, `\bf`, `\stackrel`).
+
+---
+
+## ✅ Key Features
+
+- Image + PDF parity: Full support for detection, extraction, recognition, and downloads.
+- Robust detector: YOLOv5 (TorchScript) with tuned thresholds and duplicate-box removal.
+- Transformer recognizer: LaTeX generation with local pix2tex fallback.
+- Gemini assistance: Optional auto-descriptions and LaTeX-from-image when recognition is weak.
+- Modern UI: Streamlit dark theme, centered LaTeX rendering, clean layout.
+- Downloads: Single-page annotated PDF and full ZIP package.
+- KaTeX normalization: Converts `\cal`, `\bf`, `\stackrel{}` → KaTeX-friendlier forms for reliable rendering.
+
+---
+
+## 🤖 Model
+
+### Architecture Overview
+Two-stage pipeline:
+
+1) Formula Detection
+- Model: YOLOv5 (TorchScript: `MathDetector.ts`)
+- Output: Bounding boxes with confidence scores
+- Post-processing:
+  - Confidence: `0.32`
+  - NMS: `0.75`
+  - Duplicate removal via IoU: `0.3`
+
+2) Formula Recognition
+- Model: Transformer recognizer (`MathRecog.pth`)
+- Output: LaTeX for each crop
+- Fallback: pix2tex (optional, local)
+- Placeholder: `[Unrecognized]` if all fail
+
+---
+
+## 📊 Data
+
+Data is collected from ICDAR competition for 2019 and 2021.
+
+- Dataset: https://www.kaggle.com/ro101010/math-formula-detection
+
+---
+
+## 📁 Project Structure
+
 ```
+Math-Formula-Detection/
+├── app.py                           # Streamlit UI (Image + PDF parity)
+├── Inference_Math_Detection.py      # YOLOv5 detection pipeline with NMS & duplicate removal
+├── Recog_MathForm.py                # Formula recognition (LaTeX generation + fallbacks)
+├── formula_extraction.py            # Extraction, exports (PDF/ZIP), AI helpers
+├── models.py                        # Model definitions
+├── requirements.txt                 # Python dependencies
+├── packages.txt                     # System-level dependencies (Linux/macOS notes)
+├── README.md                        # This file
+│
+├── Models/
+│   ├── MathDetector.ts              # YOLOv5 detector (TorchScript)
+│   ├── MathRecog.pth                # Formula recognizer checkpoint
+│   ├── tokenizer.json               # Tokenizer for LaTeX generation
+│   └── config.yaml                  # Model configuration
+│
+├── ICDAR2019/
+│   └── labels/
+├── ICDAR2021/
+│   └── labels/
+│
+└── extracted_output_*/              # Generated outputs (timestamped)
+    ├── formulas_report.pdf          # Single-page annotated PDF with all formulas
+    ├── extracted_formulas.zip       # Full package with all results
+    ├── formula_images/              # Individual formula crop images
+    └── annotated_image.png          # Original image with detection boxes
+```
+
+---
+
+## ⚙️ Installation & Setup
+
+### Prerequisites
+- Python 3.10 (tested)
+- pip
+- Git
+- CUDA (optional)
+- macOS users: Homebrew for `poppler`
+
+### 1) Clone
+```bash
+git clone https://github.com/Subhajyoti-Maity/Math-Formula-Detection.git
+cd Math-Formula-Detection
+```
+
+### 2) Virtual environment
+```bash
+# macOS/Linux
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Windows (PowerShell)
+python -m venv .venv
+.\.venv\Scripts\activate
+```
+
+### 3) Install dependencies
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+System packages:
+- macOS: `brew install poppler`
+- Linux/WSL:
+```bash
+sudo apt-get update
+sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev poppler-utils
+```
+
+### 4) Gemini (optional, recommended)
+Provide an API key via environment variable or `.env`:
+```bash
+# macOS/Linux
+export GEMINI_API_KEY=YOUR_KEY
+
+# Or create a .env file in the project root:
+# Option A (standard)
+GEMINI_API_KEY=YOUR_KEY
+# Option B (raw value on first line)
+YOUR_KEY
+```
+`.env` is git-ignored.
+
+### 5) Run the app
+```bash
+streamlit run app.py
+# If port busy:
+streamlit run app.py --server.port 8503
+```
+Models auto-download at first run.
+
+---
+
+## 🚀 Usage
+
+1) Select input (Image or PDF). For PDF, choose a page.
+2) Launch the Detection! – shows red boxes and count.
+3) Extract Formulas to File – saves PDF report, ZIP, crops.
+4) View Extracted Formulas – expanders with:
+   - Formula image (crop)
+   - About this formula: Gemini or heuristic description (shown under the image only)
+   - LaTeX Formula (copyable)
+   - Rendered (KaTeX; normalized macros)
+   - Bounding Box + Confidence
+
+Gemini LaTeX fallback runs automatically for suspicious/invalid recognizer outputs (limited calls per action to control cost).
+
+---
+
+## 📥 Downloads
+- PDF: Single-page annotated report with all detections.
+- ZIP: PDF + annotated image + crops + metadata.
+
+---
+
+## 🔧 Configuration
+
+Detection parameters in `Inference_Math_Detection.py`:
+```python
+confidence_threshold = 0.32
+nms_threshold = 0.75
+duplicate_iou_threshold = 0.3
+```
+Adjust for your documents.
+
+---
+
+## 🐛 Troubleshooting
+
+| Issue | Solution |
+|------|----------|
+| Port busy | `streamlit run app.py --server.port 8503` |
+| Models missing | First run auto-downloads; keep internet on |
+| OpenCV errors | `pip install opencv-python-headless` |
+| PDF conversion fails | Install `fpdf2` and `poppler` |
+| Gemini not used | Check `.env` or `GEMINI_API_KEY`; restart app |
+| LaTeX fails to render | Normalization applied; copy raw LaTeX from the code block |
+
+---
+
+## 📝 Requirements
+
+### Python packages (key)
+- streamlit
+- torch==2.5.1, torchvision==0.20.1
+- opencv-python-headless
+- transformers
+- albumentations==1.2.1
+- timm==1.0.11
+- x-transformers, einops
+- pdf2image
+- fpdf2
+- protobuf==3.20.3
+- Optional local OCR: pix2tex
+- Optional AI assistance: google-generativeai, python-dotenv
+
+### System packages
+- poppler-utils / poppler
+- libgl1-mesa-glx, libglib2.0-0, libsm6, libxext6, libxrender-dev (Linux)
+
+---
+
+## 📄 License
+This project builds upon the ICDAR dataset and academic research in formula detection.
+
+---
+
+## 🤝 Contributing
+Contributions, bug reports, and feature requests are welcome.
+
+---
+
+## 📞 Support
+Please open an issue in the repository for help.
 Math-Formula-Detection/
 ├── app.py                           # Streamlit UI (Image + PDF parity)
 ├── Inference_Math_Detection.py      # YOLOv5 detection pipeline with NMS & duplicate removal

@@ -10,6 +10,7 @@ import pdf2image
 import os
 import zipfile
 import io
+import re
 
 def download_models():
     mathdetector = './Models/MathDetector.ts'
@@ -34,17 +35,48 @@ def draw_rectangles (image, preds):
         cv2.rectangle(image, (int(each_pred[0]),int(each_pred[1])), (int(each_pred[2]),int(each_pred[3])),(255,0,0),2)
 
 
+def _normalize_latex_for_katex(s: str) -> str:
+    """Normalize common non-standard macros to KaTeX-safe equivalents.
+
+    Examples handled:
+    - \cal X -> \mathcal{X}
+    - \bf X  -> \mathbf{X}; \bf\nabla -> \boldsymbol{\nabla}
+    - \it X  -> \mathit{X}; \rm X -> \mathrm{X}
+    - \simLambda -> \tilde{\Lambda} (heuristic)
+    - \stackrel{a}{b} -> \overset{a}{b} (more robust in KaTeX)
+    """
+    if not s:
+        return s
+    t = s
+    # \cal -> \mathcal{}
+    t = re.sub(r"\\cal\s*([A-Za-z])", r"\\mathcal{\1}", t)
+    # \bf token forms
+    t = re.sub(r"\\bf\s*([A-Za-z])", r"\\mathbf{\1}", t)
+    t = re.sub(r"\\bf\s*\{([^}]*)\}", r"\\mathbf{\1}", t)
+    t = t.replace("\\bf\\nabla", "\\boldsymbol{\\nabla}")
+    # \it, \rm
+    t = re.sub(r"\\it\s*([A-Za-z])", r"\\mathit{\1}", t)
+    t = re.sub(r"\\rm\s*([A-Za-z])", r"\\mathrm{\1}", t)
+    # \simX -> \tilde{X} (heuristic for recognized tokens like \simLambda)
+    t = re.sub(r"\\sim([A-Za-z])", r"\\tilde{\\\1}", t)
+    # stackrel -> overset (KaTeX supports both; overset is often safer)
+    t = t.replace("\\stackrel", "\\overset")
+    # Minor whitespace cleanup
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
 def render_latex_block(latex_text):
     """Render LaTeX with safe fallback to keep layout aligned."""
     if latex_text is None or str(latex_text).strip() == "":
         st.info("No LaTeX available for this formula.")
         return
+    normalized = _normalize_latex_for_katex(str(latex_text))
     try:
         # st.latex centers the formula and avoids overflowing raw text blocks
-        st.latex(latex_text)
+        st.latex(normalized)
     except Exception:
         st.warning("Could not render LaTeX; showing raw text instead.")
-        st.code(latex_text, language='latex')
+        st.code(normalized, language='latex')
 
 if __name__ == '__main__':
     st.set_page_config(page_title="Math Formula Detection", page_icon="➗", layout="wide")
@@ -171,6 +203,15 @@ if __name__ == '__main__':
                                     
                                     # Recognize formulas
                                     st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
+                                    # Optionally refine LaTeX using Gemini for weak outputs
+                                    try:
+                                        st.session_state.extracted_formulas = FE.refine_formulas_latex_with_gemini(
+                                            st.session_state.extracted_formulas,
+                                            st.session_state.extracted_crops,
+                                            max_calls=8
+                                        )
+                                    except Exception:
+                                        pass
                                     # Enrich with AI descriptions if available
                                     st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
                                     
@@ -217,6 +258,15 @@ if __name__ == '__main__':
                                     
                                     # Recognize formulas
                                     st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
+                                    # Optionally refine LaTeX using Gemini for weak outputs
+                                    try:
+                                        st.session_state.extracted_formulas = FE.refine_formulas_latex_with_gemini(
+                                            st.session_state.extracted_formulas,
+                                            st.session_state.extracted_crops,
+                                            max_calls=8
+                                        )
+                                    except Exception:
+                                        pass
                                     # Optional: enrich with AI descriptions
                                     st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
                                     st.session_state.extraction_done = 'view'
@@ -287,10 +337,6 @@ if __name__ == '__main__':
                                             st.code(formula['latex'], language='latex')
                                             st.write("**Rendered:**")
                                             render_latex_block(formula['latex'])
-                                            # Show AI description if available
-                                            if 'description' in formula and formula['description']:
-                                                st.write("**About this formula:**")
-                                                st.write(formula['description'])
                                             st.write(f"**Bounding Box:** {formula['coordinates']}")
                     else:
                         st.warning("No formulas detected in the image.")
@@ -380,6 +426,15 @@ if __name__ == '__main__':
 
                                         st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
                                         st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
+                                        # Optionally refine LaTeX using Gemini for weak outputs
+                                        try:
+                                            st.session_state.extracted_formulas = FE.refine_formulas_latex_with_gemini(
+                                                st.session_state.extracted_formulas,
+                                                st.session_state.extracted_crops,
+                                                max_calls=8
+                                            )
+                                        except Exception:
+                                            pass
                                         # Enrich with AI descriptions if available
                                         st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
 
@@ -418,6 +473,15 @@ if __name__ == '__main__':
                                     with st.spinner("Extracting and recognizing formulas from PDF page..."):
                                         st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
                                         st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
+                                        # Optionally refine LaTeX using Gemini for weak outputs
+                                        try:
+                                            st.session_state.extracted_formulas = FE.refine_formulas_latex_with_gemini(
+                                                st.session_state.extracted_formulas,
+                                                st.session_state.extracted_crops,
+                                                max_calls=8
+                                            )
+                                        except Exception:
+                                            pass
                                         st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
                                         st.session_state.extraction_done = 'view'
 
@@ -481,9 +545,6 @@ if __name__ == '__main__':
                                                 st.code(formula['latex'], language='latex')
                                                 st.write("**Rendered:**")
                                                 render_latex_block(formula['latex'])
-                                                if 'description' in formula and formula['description']:
-                                                    st.write("**About this formula:**")
-                                                    st.write(formula['description'])
                                                 st.write(f"**Bounding Box:** {formula['coordinates']}")
                         else:
                             st.warning(f"No formulas detected on page {page_idx}.")

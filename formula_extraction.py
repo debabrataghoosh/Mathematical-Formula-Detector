@@ -6,6 +6,7 @@ Extracts detected math formulas from images and saves them with their LaTeX repr
 import os
 import json
 import csv
+import re
 from datetime import datetime
 from PIL import Image
 import numpy as np
@@ -96,6 +97,94 @@ def enrich_formulas_with_descriptions(formulas: List[Dict]) -> List[Dict]:
     return formulas
 
 
+def _sanitize_latex_output(text: Optional[str]) -> Optional[str]:
+    """Clean Gemini output to a bare LaTeX math expression.
+    Removes code fences, leading/trailing $ or $$, and labels.
+    """
+    if not text:
+        return text
+    t = str(text).strip()
+    # Remove triple fences
+    t = re.sub(r"^```+\s*", "", t)
+    t = re.sub(r"\s*```+$", "", t)
+    # Remove language labels like 'latex' or 'LaTeX:' prefixes
+    t = re.sub(r"^(latex|LaTeX)\s*:\s*", "", t)
+    # Strip math delimiters
+    t = t.strip()
+    t = t.strip("$")
+    t = t.strip()
+    return t
+
+
+def _is_latex_suspicious(expr: Optional[str]) -> bool:
+    """Heuristic check: is the LaTeX likely invalid or too weak?
+    - Empty or very short
+    - Unbalanced braces
+    - No LaTeX macros at all
+    """
+    if not expr or not isinstance(expr, str):
+        return True
+    s = expr.strip()
+    if len(s) < 3:
+        return True
+    # Brace balance check
+    bal = 0
+    for ch in s:
+        if ch == '{':
+            bal += 1
+        elif ch == '}':
+            bal -= 1
+            if bal < 0:
+                return True
+    if bal != 0:
+        return True
+    # At least one macro
+    if not re.search(r"\\[A-Za-z]+", s):
+        return True
+    return False
+
+
+def generate_latex_with_gemini_from_crop(crop_bgr: np.ndarray) -> Optional[str]:
+    """Ask Gemini to produce clean LaTeX from a formula image crop."""
+    model, ok = _build_gemini_client()
+    if not ok or model is None:
+        return None
+    try:
+        # Convert BGR np array to PIL Image
+        rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(rgb)
+        prompt = (
+            "Return only the LaTeX math expression for this formula image. "
+            "Do not include any explanations, words, or code fences. "
+            "Prefer standard macros (\\frac, \\sum, \\int, \\nabla, \\partial, \\sqrt). "
+            "Avoid surrounding $ or $$; output the bare LaTeX expression."
+        )
+        resp = model.generate_content([prompt, pil_img], request_options={"timeout": 25})
+        text = getattr(resp, 'text', None)
+        return _sanitize_latex_output(text)
+    except Exception:
+        return None
+
+
+def refine_formulas_latex_with_gemini(formulas: List[Dict], extracted_crops: List[Dict], max_calls: int = 8) -> List[Dict]:
+    """Replace suspicious LaTeX with Gemini-generated LaTeX from the crop image.
+    Limits calls via `max_calls` to control cost.
+    """
+    if not formulas or not extracted_crops:
+        return formulas
+    calls = 0
+    for f, crop in zip(formulas, extracted_crops):
+        if calls >= max_calls:
+            break
+        curr = f.get('latex', '')
+        if _is_latex_suspicious(curr):
+            new_latex = generate_latex_with_gemini_from_crop(crop.get('image'))
+            if new_latex and isinstance(new_latex, str) and len(new_latex.strip()) > 0:
+                f['latex'] = new_latex.strip()
+                calls += 1
+    return formulas
+
+
 def _basic_formula_description(latex: str) -> Optional[str]:
     """Heuristic fallback description when Gemini is unavailable.
     Provides a short reader-friendly summary based on LaTeX cues.
@@ -107,43 +196,102 @@ def _basic_formula_description(latex: str) -> Optional[str]:
     # Named/common formulas first
     if "1" in s and "2\\pi" in s and "\\oint" in s:
         return (
-            "Cauchy's Integral Formula: expresses the value of an analytic function "
-            "inside a contour via a contour integral around it. Used across complex analysis "
-            "for evaluation and deriving power-series/identity results."
+            "**Cauchy's Integral Formula** – One of the fundamental theorems in complex analysis. "
+            "This formula expresses the value of an analytic (holomorphic) function at any point inside a closed contour "
+            "in terms of a contour integral around that path. It is instrumental in evaluating complex integrals, "
+            "deriving power series representations (Taylor and Laurent series), and proving the residue theorem. "
+            "Applications span theoretical physics (quantum field theory), engineering (signal processing), "
+            "and pure mathematics (analytic number theory)."
         )
     if "\\nabla\\cdot" in s or "\\operatorname{div}" in s:
         return (
-            "Divergence (Gauss's) theorem form: relates the flux of a vector field through a surface "
-            "to the volume integral of its divergence. Common in electromagnetism and fluid dynamics."
+            "**Divergence Theorem (Gauss's Theorem)** – A cornerstone result in vector calculus connecting "
+            "the flux of a vector field through a closed surface to the volume integral of the field's divergence. "
+            "Mathematically: ∫∫_S F·n dS = ∫∫∫_V (∇·F) dV. This theorem is essential in electromagnetism "
+            "(Gauss's law for electric fields), fluid dynamics (continuity equation), and heat transfer. "
+            "It provides insight into how sources and sinks of a field behave within a volume."
         )
     if "\\sigma" in s and ("^2" in s or "\\sqrt" in s):
         return (
-            "Standard deviation/variance expression: measures spread of data around the mean; "
-            "frequent in statistics and data analysis."
+            "**Standard Deviation / Variance Formula** – A fundamental statistical measure quantifying "
+            "the dispersion or spread of data points relative to their mean. Variance (σ²) is the average of "
+            "squared deviations from the mean, while standard deviation (σ) is its square root. "
+            "These metrics are critical in probability theory, hypothesis testing, quality control, "
+            "finance (risk assessment), and machine learning (understanding data distributions and regularization)."
         )
 
     # General categories
     if "\\sum" in s:
-        return "Series/summation expression: combines terms of a sequence; common in discrete math and analysis."
+        return (
+            "**Series / Summation Expression** – Represents the sum of terms in a sequence, often indexed over integers. "
+            "Summations are ubiquitous in discrete mathematics, combinatorics, number theory, and algorithm analysis. "
+            "Common examples include arithmetic/geometric series, power series, and Fourier series. "
+            "They model cumulative effects, total counts, and approximate continuous integrals in numerical methods."
+        )
     if "\\int" in s and "_" in s:
-        return "Definite integral: accumulates a quantity over an interval; fundamental to calculus and area/accumulation."
+        return (
+            "**Definite Integral** – Calculates the accumulation of a quantity (area under a curve, total displacement, work done) "
+            "over a specified interval [a, b]. The fundamental theorem of calculus links this to antiderivatives. "
+            "Definite integrals are central to physics (computing work, energy, flux), engineering (signal processing), "
+            "economics (consumer surplus), and probability (expected values via continuous distributions)."
+        )
     if "\\oint" in s:
-        return "Contour integral: integral taken over a closed path in the complex plane; central to complex analysis."
+        return (
+            "**Contour Integral** – An integral taken over a closed curve (contour) in the complex plane. "
+            "This concept is vital in complex analysis, enabling evaluation via the residue theorem and Cauchy's theorem. "
+            "Contour integrals simplify otherwise difficult real integrals and appear in quantum mechanics, "
+            "string theory, and advanced electromagnetic field calculations."
+        )
     if "\\partial" in s or "\\frac{\\partial" in s:
-        return "Partial derivative: rate of change of a multivariable function with respect to one variable."
+        return (
+            "**Partial Derivative** – Measures the rate of change of a multivariable function with respect to one variable, "
+            "holding others constant. Notation: ∂f/∂x. Partial derivatives are the foundation of gradient descent "
+            "(machine learning optimization), thermodynamics (Maxwell relations), fluid dynamics (Navier-Stokes equations), "
+            "and economics (marginal analysis). They generalize the single-variable derivative concept."
+        )
     if "\\nabla" in s:
-        return "Vector calculus operator (nabla): indicates gradient, divergence, or curl in vector fields."
+        return (
+            "**Vector Calculus Operator (Nabla, ∇)** – The del operator applied to scalar or vector fields. "
+            "When applied to a scalar, it yields the gradient (∇f), pointing in the direction of steepest ascent. "
+            "For vector fields, ∇· gives divergence (source/sink density) and ∇× gives curl (rotational tendency). "
+            "Essential in electromagnetism (Maxwell's equations), fluid mechanics, and optimization algorithms."
+        )
     if "\\lim" in s:
-        return "Limit expression: describes behavior of a function as the input approaches a point."
+        return (
+            "**Limit Expression** – Describes the behavior of a function as its input approaches a specific value or infinity. "
+            "Limits form the rigorous foundation of calculus (defining derivatives and integrals), "
+            "analyze function continuity, and characterize asymptotic behavior in algorithm complexity analysis. "
+            "They are indispensable in real analysis, numerical methods, and understanding convergence of sequences/series."
+        )
     if "\\mathbb{e}" in s or "e^{" in s:
-        return "Exponential expression: growth/decay or solution of differential equations; ubiquitous in analysis."
+        return (
+            "**Exponential Expression** – Functions involving the natural exponential base e ≈ 2.718. "
+            "Exponential growth/decay models population dynamics, radioactive decay, compound interest, and neural activations. "
+            "In differential equations, e^x is its own derivative, making it the solution to many fundamental ODEs. "
+            "Appears throughout probability (exponential distribution), complex analysis (Euler's formula: e^(iθ) = cos θ + i sin θ), "
+            "and information theory (entropy)."
+        )
     if "\\log" in s:
-        return "Logarithmic expression: inverse of exponentials; common in information theory and scaling laws."
+        return (
+            "**Logarithmic Expression** – The inverse of the exponential function, answering 'to what power must the base be raised?'. "
+            "Logarithms compress large ranges (decibel scales, Richter scale), appear in complexity analysis (O(log n) algorithms), "
+            "information theory (bits of information), and are central to entropy, pH calculations, and solving exponential equations."
+        )
     if "\\frac" in s:
-        return "Rational expression: ratio of two quantities, often representing rates or normalized forms."
+        return (
+            "**Rational / Fractional Expression** – Represents the ratio of two quantities (numerator/denominator). "
+            "Fractions model rates (speed = distance/time), probabilities, proportions, and normalized values. "
+            "In calculus, they appear in derivative rules (quotient rule) and rational function integration. "
+            "Common in physics (ratios of forces, densities), economics (marginal rates), and engineering (transfer functions)."
+        )
 
     # Fallback generic
-    return "Mathematical formula: symbolic representation of a relationship; context suggests calculus/analysis usage."
+    return (
+        "**General Mathematical Expression** – This formula represents a symbolic relationship between mathematical quantities. "
+        "Without more specific LaTeX cues, it likely involves algebraic manipulation, calculus operations, or analytical techniques. "
+        "Mathematical expressions encode laws of nature, logical relationships, optimization constraints, and computational algorithms. "
+        "They serve as the universal language for modeling phenomena across science, engineering, economics, and technology."
+    )
 
 
 def _chunk_text_for_pdf(text: str, chunk_size: int = 80) -> str:
