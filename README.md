@@ -111,7 +111,7 @@ Math-Formula-Detection/
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/Subhajyoti-Maity/Math-Formula-Detection.git
+git clone https://github.com/debabrataghoosh/Mathematical-Formula-Detector.git
 cd Math-Formula-Detection
 ```
 
