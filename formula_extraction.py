@@ -12,6 +12,86 @@ import numpy as np
 import cv2
 import io
 from fpdf import FPDF
+import os
+from typing import List, Dict, Optional
+
+
+def _get_gemini_api_key() -> Optional[str]:
+    """Resolve Gemini API key from env or a simple .env file.
+    Supports two formats:
+    - Standard: GEMINI_API_KEY=...
+    - Raw: first line is the key value
+    """
+    key = os.getenv('GEMINI_API_KEY')
+    if key:
+        return key.strip()
+    env_path = os.path.join(os.getcwd(), '.env')
+    try:
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if '=' in content:
+                    for line in content.splitlines():
+                        if line.startswith('GEMINI_API_KEY='):
+                            return line.split('=', 1)[1].strip()
+                elif content:
+                    return content  # treat as raw key
+    except Exception:
+        pass
+    return None
+
+
+def _build_gemini_client():
+    """Lazily create a Gemini client if API key is available. Returns (model, enabled_bool)."""
+    api_key = _get_gemini_api_key()
+    if not api_key:
+        return None, False
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        return model, True
+    except Exception:
+        return None, False
+
+
+def describe_formula_with_gemini(latex: str) -> Optional[str]:
+    """Use Gemini to generate a short, reader-friendly description of a LaTeX formula.
+    Returns text or None on failure."""
+    if not latex or not isinstance(latex, str):
+        return None
+    model, ok = _build_gemini_client()
+    if not ok or model is None:
+        return None
+    prompt = (
+        "You will be given a LaTeX math formula. Identify the formula's common name "
+        "(e.g., 'Cauchy's Integral Formula', 'Gauss Divergence Theorem', 'Standard Deviation'), "
+        "then provide a 2-3 sentence plain-English explanation of what it represents and typical use-cases. "
+        "If the name is unclear, provide the closest general category (e.g., 'definite integral', 'vector calculus identity'). "
+        "Keep it concise and helpful for a non-expert reader.\n\nLaTeX:\n" + latex
+    )
+    try:
+        resp = model.generate_content(prompt, request_options={"timeout": 20})
+        text = getattr(resp, 'text', None)
+        if text:
+            return text.strip()
+    except Exception:
+        return None
+    return None
+
+
+def enrich_formulas_with_descriptions(formulas: List[Dict]) -> List[Dict]:
+    """Add a 'description' field to each recognized formula using Gemini if available."""
+    if not formulas:
+        return formulas
+    for f in formulas:
+        try:
+            desc = describe_formula_with_gemini(f.get('latex', ''))
+            if desc:
+                f['description'] = desc
+        except Exception:
+            pass
+    return formulas
 
 
 def _chunk_text_for_pdf(text: str, chunk_size: int = 80) -> str:

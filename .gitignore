@@ -61,6 +61,9 @@ ICDAR2021/images/
 .streamlit/secrets.toml
 .streamlit/config.toml
 
+# Local environment files
+.env
+
 # Logs
 *.log
 logs/
