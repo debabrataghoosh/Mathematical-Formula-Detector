@@ -87,11 +87,63 @@ def enrich_formulas_with_descriptions(formulas: List[Dict]) -> List[Dict]:
     for f in formulas:
         try:
             desc = describe_formula_with_gemini(f.get('latex', ''))
+            if not desc:
+                desc = _basic_formula_description(f.get('latex', ''))
             if desc:
                 f['description'] = desc
         except Exception:
             pass
     return formulas
+
+
+def _basic_formula_description(latex: str) -> Optional[str]:
+    """Heuristic fallback description when Gemini is unavailable.
+    Provides a short reader-friendly summary based on LaTeX cues.
+    """
+    if not isinstance(latex, str) or not latex.strip():
+        return None
+    s = latex.replace("\\ ", " ").lower()
+
+    # Named/common formulas first
+    if "1" in s and "2\\pi" in s and "\\oint" in s:
+        return (
+            "Cauchy's Integral Formula: expresses the value of an analytic function "
+            "inside a contour via a contour integral around it. Used across complex analysis "
+            "for evaluation and deriving power-series/identity results."
+        )
+    if "\\nabla\\cdot" in s or "\\operatorname{div}" in s:
+        return (
+            "Divergence (Gauss's) theorem form: relates the flux of a vector field through a surface "
+            "to the volume integral of its divergence. Common in electromagnetism and fluid dynamics."
+        )
+    if "\\sigma" in s and ("^2" in s or "\\sqrt" in s):
+        return (
+            "Standard deviation/variance expression: measures spread of data around the mean; "
+            "frequent in statistics and data analysis."
+        )
+
+    # General categories
+    if "\\sum" in s:
+        return "Series/summation expression: combines terms of a sequence; common in discrete math and analysis."
+    if "\\int" in s and "_" in s:
+        return "Definite integral: accumulates a quantity over an interval; fundamental to calculus and area/accumulation."
+    if "\\oint" in s:
+        return "Contour integral: integral taken over a closed path in the complex plane; central to complex analysis."
+    if "\\partial" in s or "\\frac{\\partial" in s:
+        return "Partial derivative: rate of change of a multivariable function with respect to one variable."
+    if "\\nabla" in s:
+        return "Vector calculus operator (nabla): indicates gradient, divergence, or curl in vector fields."
+    if "\\lim" in s:
+        return "Limit expression: describes behavior of a function as the input approaches a point."
+    if "\\mathbb{e}" in s or "e^{" in s:
+        return "Exponential expression: growth/decay or solution of differential equations; ubiquitous in analysis."
+    if "\\log" in s:
+        return "Logarithmic expression: inverse of exponentials; common in information theory and scaling laws."
+    if "\\frac" in s:
+        return "Rational expression: ratio of two quantities, often representing rates or normalized forms."
+
+    # Fallback generic
+    return "Mathematical formula: symbolic representation of a relationship; context suggests calculus/analysis usage."
 
 
 def _chunk_text_for_pdf(text: str, chunk_size: int = 80) -> str:

@@ -171,6 +171,8 @@ if __name__ == '__main__':
                                     
                                     # Recognize formulas
                                     st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
+                                    # Enrich with AI descriptions if available
+                                    st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
                                     
                                     # Save all files to output directory
                                     formulas = st.session_state.extracted_formulas
@@ -215,6 +217,8 @@ if __name__ == '__main__':
                                     
                                     # Recognize formulas
                                     st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
+                                    # Optional: enrich with AI descriptions
+                                    st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
                                     st.session_state.extraction_done = 'view'
                         
                         # Display extraction results if extraction was done
@@ -273,12 +277,20 @@ if __name__ == '__main__':
                                             coords = formula['coordinates']
                                             crop_img = st.session_state.opencv_image[coords[1]:coords[3], coords[0]:coords[2]]
                                             st.image(crop_img, use_column_width=True)
+                                            # Show AI description directly under the image if available
+                                            if 'description' in formula and formula['description']:
+                                                st.write("**About this formula:**")
+                                                st.write(formula['description'])
                                         
                                         with exp_col2:
                                             st.write("**LaTeX Formula:**")
                                             st.code(formula['latex'], language='latex')
                                             st.write("**Rendered:**")
                                             render_latex_block(formula['latex'])
+                                            # Show AI description if available
+                                            if 'description' in formula and formula['description']:
+                                                st.write("**About this formula:**")
+                                                st.write(formula['description'])
                                             st.write(f"**Bounding Box:** {formula['coordinates']}")
                     else:
                         st.warning("No formulas detected in the image.")
@@ -368,6 +380,8 @@ if __name__ == '__main__':
 
                                         st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
                                         st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
+                                        # Enrich with AI descriptions if available
+                                        st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
 
                                         formulas = st.session_state.extracted_formulas
                                         extracted_crops = st.session_state.extracted_crops
@@ -404,6 +418,7 @@ if __name__ == '__main__':
                                     with st.spinner("Extracting and recognizing formulas from PDF page..."):
                                         st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
                                         st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
+                                        st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
                                         st.session_state.extraction_done = 'view'
 
                             if st.session_state.extraction_done == True:
@@ -457,12 +472,18 @@ if __name__ == '__main__':
                                                 coords = formula['coordinates']
                                                 crop_img = st.session_state.opencv_image[coords[1]:coords[3], coords[0]:coords[2]]
                                                 st.image(crop_img, use_column_width=True)
+                                                if 'description' in formula and formula['description']:
+                                                    st.write("**About this formula:**")
+                                                    st.write(formula['description'])
 
                                             with exp_col2:
                                                 st.write("**LaTeX Formula:**")
                                                 st.code(formula['latex'], language='latex')
                                                 st.write("**Rendered:**")
                                                 render_latex_block(formula['latex'])
+                                                if 'description' in formula and formula['description']:
+                                                    st.write("**About this formula:**")
+                                                    st.write(formula['description'])
                                                 st.write(f"**Bounding Box:** {formula['coordinates']}")
                         else:
                             st.warning(f"No formulas detected on page {page_idx}.")
