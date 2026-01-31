@@ -223,6 +223,33 @@ Models auto-download at first run.
 
 ---
 
+## ☁️ Deployment
+
+### Vercel (important)
+Vercel does **not** support running Streamlit apps. This project depends on:
+- A long-running Streamlit server process
+- Native system packages (e.g., `poppler`, `libgl`)
+- Large ML model downloads at runtime
+
+Those requirements are incompatible with Vercel’s serverless runtime. If you **must** use Vercel, the app needs to be refactored to a serverless web framework (e.g., FastAPI/Next.js) and the ML inference split into API endpoints. I can help with that refactor if you want.
+
+### Recommended hosting options (no refactor)
+**Streamlit Community Cloud** (easiest):
+1. Push this repo to GitHub.
+2. Go to https://share.streamlit.io and deploy the repo.
+3. Set `GEMINI_API_KEY` in **Secrets** (optional).
+
+**Hugging Face Spaces (Streamlit)**:
+1. Create a new Space → choose **Streamlit**.
+2. Upload this repo (or connect GitHub).
+3. Add `GEMINI_API_KEY` in **Settings → Variables** (optional).
+4. `packages.txt` and `requirements.txt` are already compatible.
+
+**Render/Railway (Docker)**:
+Use a Dockerfile with system packages (`poppler`, `libgl`) and run `streamlit run app.py`.
+
+---
+
 ## 🚀 Usage
 
 1) Select input (Image or PDF). For PDF, choose a page.
