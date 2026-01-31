@@ -23,6 +23,12 @@ def _get_gemini_api_key() -> Optional[str]:
     - Standard: GEMINI_API_KEY=...
     - Raw: first line is the key value
     """
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+            return str(st.secrets["GEMINI_API_KEY"]).strip()
+    except Exception:
+        pass
     key = os.getenv('GEMINI_API_KEY')
     if key:
         return key.strip()
