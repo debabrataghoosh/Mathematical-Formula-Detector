@@ -3,10 +3,10 @@ pandas>=2.0,<2.3
 Pillow>=9.0,<11
 PyYAML>=6.0.1
 streamlit>=1.25,<2.0
-# Use CPU-only PyTorch with flexible versions for Python 3.10+
-torch>=2.0,<2.6
-torchvision>=0.15,<0.21
-transformers==4.45.0
+# Use latest PyTorch versions compatible with Python 3.13
+torch>=2.5
+torchvision>=0.20
+transformers>=4.45
 protobuf==3.20.3
 opencv-python-headless
 gdown
