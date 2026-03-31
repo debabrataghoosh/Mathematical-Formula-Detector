@@ -36,7 +36,7 @@ def draw_rectangles (image, preds):
 
 
 def _normalize_latex_for_katex(s: str) -> str:
-    """Normalize common non-standard macros to KaTeX-safe equivalents.
+    r"""Normalize common non-standard macros to KaTeX-safe equivalents.
 
     Examples handled:
     - \cal X -> \mathcal{X}
@@ -85,31 +85,101 @@ if __name__ == '__main__':
     st.markdown(
         """
         <style>
-        /* Modern look: bold type, soft card edges, subtle glow */
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap');
-        html, body, [class*="css"]  { font-family: 'Space Grotesk', sans-serif; }
-        .main { background: radial-gradient(circle at 20% 20%, rgba(0,181,173,0.12), transparent 30%),
-                          radial-gradient(circle at 80% 0%, rgba(255,140,66,0.14), transparent 32%),
-                          #0f1116;
-                 color: #e6e8ef; }
-        .stSidebar { background: #0b0d12; }
-        .stSidebar, .st-bb, .st-at, .st-bc { color: #e6e8ef; }
-        .css-1d391kg, .css-1lcbmhc { color: #e6e8ef; }
-        .stButton>button { border-radius: 12px; border: 1px solid #1dd3b0; color: #0b0d12;
-                           background: linear-gradient(135deg, #1dd3b0 0%, #17a2f3 100%);
-                           box-shadow: 0 10px 30px rgba(23,162,243,0.25); font-weight: 600; }
-        .stButton>button:hover { box-shadow: 0 12px 34px rgba(29,211,176,0.35); transform: translateY(-1px); }
-        .stDownloadButton>button { border-radius: 12px; background: #151a23; border: 1px solid #283344;
-                                   color: #e6e8ef; box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
-        .stDownloadButton>button:hover { border-color: #1dd3b0; color: #1dd3b0; }
-        .block-container { padding-top: 1.8rem; padding-bottom: 2rem; }
-        .metric-card { background: #151a23; border: 1px solid #1f2a39; border-radius: 14px;
-                       padding: 1rem 1.2rem; box-shadow: 0 12px 45px rgba(0,0,0,0.35); }
-        .stExpander { background: #151a23; border: 1px solid #1f2a39; border-radius: 12px; }
-        .stExpander > div > div { padding: 0.75rem 1rem; }
-        .stAlert { border-radius: 12px; border: 1px solid #1dd3b0; background: rgba(29,211,176,0.08); }
-        .stMarkdown h1, h2, h3 { color: #e6e8ef; }
-        .latex { color: #e6e8ef; }
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap');
+
+        :root {
+            --bg-0: #081018;
+            --bg-1: #0e1622;
+            --panel: rgba(18, 27, 40, 0.86);
+            --panel-2: rgba(14, 22, 34, 0.92);
+            --line: rgba(113, 146, 181, 0.28);
+            --text: #eaf2ff;
+            --text-soft: #9cb3cc;
+            --mint: #1dd3b0;
+            --amber: #ffb255;
+            --cyan: #43b2ff;
+        }
+
+        html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; color: var(--text); }
+        .main {
+            background:
+                radial-gradient(circle at 14% 4%, rgba(67, 178, 255, 0.18), transparent 34%),
+                radial-gradient(circle at 90% -8%, rgba(255, 178, 85, 0.16), transparent 35%),
+                radial-gradient(circle at 50% 120%, rgba(29, 211, 176, 0.14), transparent 45%),
+                linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+        }
+
+        .block-container { padding-top: 1.2rem; padding-bottom: 2rem; max-width: none; padding-left: 2rem; padding-right: 2rem; }
+        .stSidebar { background: linear-gradient(180deg, #0a111b 0%, #0f1622 100%); border-right: 1px solid rgba(67, 178, 255, 0.2); }
+
+        .hero {
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 1rem 1.15rem 1.1rem 1.15rem;
+            background:
+                linear-gradient(135deg, rgba(67, 178, 255, 0.10), transparent 35%),
+                linear-gradient(320deg, rgba(255, 178, 85, 0.10), transparent 30%),
+                var(--panel);
+            box-shadow: 0 20px 40px rgba(3, 8, 16, 0.45);
+            backdrop-filter: blur(8px);
+        }
+
+        .hero-title { font-size: 1.95rem; font-weight: 700; line-height: 1.15; margin-bottom: 0.25rem; }
+        .hero-subtitle { color: var(--text-soft); font-size: 0.98rem; margin-bottom: 0.7rem; }
+
+        .chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .chip {
+            border: 1px solid var(--line);
+            background: rgba(11, 18, 28, 0.74);
+            color: #cfe4ff;
+            border-radius: 999px;
+            padding: 0.27rem 0.68rem;
+            font-size: 0.78rem;
+            letter-spacing: 0.03em;
+        }
+
+        .stButton > button {
+            border-radius: 12px;
+            border: 1px solid rgba(25, 198, 169, 0.65);
+            color: #04151c;
+            background: linear-gradient(135deg, var(--mint) 0%, var(--cyan) 100%);
+            box-shadow: 0 10px 22px rgba(67, 178, 255, 0.23);
+            font-weight: 700;
+            transition: transform .15s ease, box-shadow .15s ease;
+        }
+        .stButton > button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 26px rgba(29, 211, 176, 0.30);
+        }
+
+        .stDownloadButton > button {
+            border-radius: 12px;
+            background: var(--panel-2);
+            border: 1px solid rgba(113, 146, 181, 0.32);
+            color: var(--text);
+        }
+        .stDownloadButton > button:hover { border-color: var(--mint); color: var(--mint); }
+
+        .stExpander {
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: rgba(14, 22, 34, 0.86);
+        }
+        .stAlert { border-radius: 12px; border: 1px solid rgba(29, 211, 176, 0.5); }
+
+        .empty-state {
+            margin-top: 0.9rem;
+            border: 1px dashed rgba(113, 146, 181, 0.34);
+            background: rgba(9, 15, 24, 0.6);
+            border-radius: 16px;
+            padding: 0.9rem 1rem;
+            color: var(--text-soft);
+        }
+
+        code {
+            font-family: 'IBM Plex Mono', monospace !important;
+            letter-spacing: .02em;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -141,14 +211,31 @@ if __name__ == '__main__':
     mathargs, *mathobjs = RM.initialize()
 
     st.markdown("""
-        <div style="display:flex; align-items:center; gap:12px;">
-            <div style="background:linear-gradient(135deg,#1dd3b0,#17a2f3); width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-weight:800; color:#0b0d12;">∑</div>
-            <div>
-                <div style="font-size:28px; font-weight:700; color:#e6e8ef;">Mathematical Formula Detector</div>
-                <div style="color:#94a3b8;">Detect • Extract • Render LaTeX from images and PDFs</div>
+        <div class="hero">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom: 0.3rem;">
+                <div style="background:linear-gradient(135deg,#1dd3b0,#17a2f3); width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-weight:800; color:#0b0d12;">∑</div>
+                <div>
+                    <div class="hero-title">Mathematical Formula Detector</div>
+                    <div class="hero-subtitle">Detect, extract, and render formulas from images or PDFs in a fast, export-friendly workflow.</div>
+                </div>
+            </div>
+            <div class="chip-row">
+                <span class="chip">YOLOv5 Detection</span>
+                <span class="chip">Transformer OCR</span>
+                <span class="chip">Smart LaTeX Refinement</span>
+                <span class="chip">PDF & Image Workflow</span>
             </div>
         </div>
     """, unsafe_allow_html=True)
+
+    st.markdown(
+        """
+        <div class="empty-state">
+            Choose <b>Image</b> or <b>PDF</b> from the sidebar, upload your file, then run detection to start extraction.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     inf_style = st.sidebar.selectbox("Inference Type",('Image', 'PDF'))
     if inf_style == 'Image':

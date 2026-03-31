@@ -7,6 +7,7 @@ import os
 import json
 import csv
 import re
+import base64
 from datetime import datetime
 from PIL import Image
 import numpy as np
@@ -15,6 +16,17 @@ import io
 from fpdf import FPDF
 import os
 from typing import List, Dict, Optional
+
+try:
+    from dotenv import load_dotenv
+except Exception:
+    load_dotenv = None
+
+
+_GEMINI_MODEL_CACHE = None
+_GEMINI_ENABLED_CACHE = None
+_OPENAI_CLIENT_CACHE = None
+_OPENAI_ENABLED_CACHE = None
 
 
 def _get_gemini_api_key() -> Optional[str]:
@@ -29,7 +41,13 @@ def _get_gemini_api_key() -> Optional[str]:
             return str(st.secrets["GEMINI_API_KEY"]).strip()
     except Exception:
         pass
-    key = os.getenv('GEMINI_API_KEY')
+    if load_dotenv is not None:
+        try:
+            load_dotenv(override=False)
+        except Exception:
+            pass
+
+    key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
     if key:
         return key.strip()
     env_path = os.path.join(os.getcwd(), '.env')
@@ -41,6 +59,8 @@ def _get_gemini_api_key() -> Optional[str]:
                     for line in content.splitlines():
                         if line.startswith('GEMINI_API_KEY='):
                             return line.split('=', 1)[1].strip()
+                        if line.startswith('GOOGLE_API_KEY='):
+                            return line.split('=', 1)[1].strip()
                 elif content:
                     return content  # treat as raw key
     except Exception:
@@ -48,18 +68,197 @@ def _get_gemini_api_key() -> Optional[str]:
     return None
 
 
+def _get_openai_api_key() -> Optional[str]:
+    """Resolve OpenAI API key from Streamlit secrets, env, or .env file."""
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "OPENAI_API_KEY" in st.secrets:
+            return str(st.secrets["OPENAI_API_KEY"]).strip()
+    except Exception:
+        pass
+
+    if load_dotenv is not None:
+        try:
+            load_dotenv(override=False)
+        except Exception:
+            pass
+
+    key = os.getenv('OPENAI_API_KEY')
+    if key:
+        return key.strip()
+
+    env_path = os.path.join(os.getcwd(), '.env')
+    try:
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if '=' in content:
+                    for line in content.splitlines():
+                        if line.startswith('OPENAI_API_KEY='):
+                            return line.split('=', 1)[1].strip()
+    except Exception:
+        pass
+    return None
+
+
 def _build_gemini_client():
     """Lazily create a Gemini client if API key is available. Returns (model, enabled_bool)."""
+    global _GEMINI_MODEL_CACHE, _GEMINI_ENABLED_CACHE
+    if _GEMINI_ENABLED_CACHE is not None:
+        return _GEMINI_MODEL_CACHE, _GEMINI_ENABLED_CACHE
+
     api_key = _get_gemini_api_key()
     if not api_key:
+        _GEMINI_MODEL_CACHE = None
+        _GEMINI_ENABLED_CACHE = False
         return None, False
+
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
+        _GEMINI_MODEL_CACHE = model
+        _GEMINI_ENABLED_CACHE = True
         return model, True
     except Exception:
+        _GEMINI_MODEL_CACHE = None
+        _GEMINI_ENABLED_CACHE = False
         return None, False
+
+
+def _build_openai_client():
+    """Lazily create an OpenAI client if API key is available. Returns (client, enabled_bool)."""
+    global _OPENAI_CLIENT_CACHE, _OPENAI_ENABLED_CACHE
+    if _OPENAI_ENABLED_CACHE is not None:
+        return _OPENAI_CLIENT_CACHE, _OPENAI_ENABLED_CACHE
+
+    api_key = _get_openai_api_key()
+    if not api_key:
+        _OPENAI_CLIENT_CACHE = None
+        _OPENAI_ENABLED_CACHE = False
+        return None, False
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        _OPENAI_CLIENT_CACHE = client
+        _OPENAI_ENABLED_CACHE = True
+        return client, True
+    except Exception:
+        _OPENAI_CLIENT_CACHE = None
+        _OPENAI_ENABLED_CACHE = False
+        return None, False
+
+
+def gemini_is_enabled() -> bool:
+    """Return True when Gemini is configured and client can be initialized."""
+    _, ok = _build_gemini_client()
+    return ok
+
+
+def openai_is_enabled() -> bool:
+    """Return True when OpenAI is configured and client can be initialized."""
+    _, ok = _build_openai_client()
+    return ok
+
+
+def set_gemini_api_key(api_key: str) -> bool:
+    """Set API key at runtime and reset Gemini client cache.
+    Returns True if Gemini client initializes successfully.
+    """
+    global _GEMINI_MODEL_CACHE, _GEMINI_ENABLED_CACHE
+    if not api_key or not isinstance(api_key, str):
+        return False
+    os.environ['GEMINI_API_KEY'] = api_key.strip()
+    _GEMINI_MODEL_CACHE = None
+    _GEMINI_ENABLED_CACHE = None
+    return gemini_is_enabled()
+
+
+def _np_bgr_to_data_url(crop_bgr: np.ndarray) -> Optional[str]:
+    """Convert BGR image array to PNG data URL for vision models."""
+    try:
+        ok, enc = cv2.imencode('.png', crop_bgr)
+        if not ok:
+            return None
+        b64 = base64.b64encode(enc.tobytes()).decode('utf-8')
+        return f"data:image/png;base64,{b64}"
+    except Exception:
+        return None
+
+
+def describe_formula_with_openai(latex: str) -> Optional[str]:
+    """Use OpenAI to generate a short, reader-friendly description of a LaTeX formula."""
+    if not latex or not isinstance(latex, str):
+        return None
+    client, ok = _build_openai_client()
+    if not ok or client is None:
+        return None
+    prompt = (
+        "You will be given a LaTeX math formula. Identify the formula's common name "
+        "(if known), then provide a concise 2-3 sentence plain-English explanation of "
+        "what it represents and typical use-cases. If uncertain, give the closest category.\n\n"
+        "LaTeX:\n" + latex
+    )
+    try:
+        resp = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[
+                {"role": "system", "content": "You are a concise math assistant."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            max_tokens=220,
+        )
+        text = resp.choices[0].message.content if resp and resp.choices else None
+        if text:
+            return str(text).strip()
+    except Exception:
+        return None
+    return None
+
+
+def generate_latex_with_openai_from_crop(crop_bgr: np.ndarray) -> Optional[str]:
+    """Ask OpenAI vision model to produce clean LaTeX from a formula image crop."""
+    client, ok = _build_openai_client()
+    if not ok or client is None:
+        return None
+    if crop_bgr is None:
+        return None
+    data_url = _np_bgr_to_data_url(crop_bgr)
+    if not data_url:
+        return None
+    try:
+        resp = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Return only the LaTeX math expression for the formula image. "
+                        "No explanations, no markdown, no code fences, no surrounding $ or $$."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Extract this formula as clean LaTeX using standard macros.",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": data_url},
+                        },
+                    ],
+                },
+            ],
+            temperature=0.0,
+            max_tokens=180,
+        )
+        text = resp.choices[0].message.content if resp and resp.choices else None
+        return _sanitize_latex_output(text)
+    except Exception:
+        return None
 
 
 def describe_formula_with_gemini(latex: str) -> Optional[str]:
@@ -83,8 +282,9 @@ def describe_formula_with_gemini(latex: str) -> Optional[str]:
         if text:
             return text.strip()
     except Exception:
-        return None
-    return None
+        pass
+    # Fallback provider
+    return describe_formula_with_openai(latex)
 
 
 def enrich_formulas_with_descriptions(formulas: List[Dict]) -> List[Dict]:
@@ -169,7 +369,9 @@ def generate_latex_with_gemini_from_crop(crop_bgr: np.ndarray) -> Optional[str]:
         text = getattr(resp, 'text', None)
         return _sanitize_latex_output(text)
     except Exception:
-        return None
+        pass
+    # Fallback provider
+    return generate_latex_with_openai_from_crop(crop_bgr)
 
 
 def refine_formulas_latex_with_gemini(formulas: List[Dict], extracted_crops: List[Dict], max_calls: int = 8) -> List[Dict]:
