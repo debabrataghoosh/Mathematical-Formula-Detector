@@ -157,8 +157,8 @@ def initialize(arguments=None):
 
 def call_model(args, model, tokenizer, img=None):
     encoder, decoder = model.encoder, model.decoder
-    img = minmax_size(pad(img), args.max_dimensions, args.min_dimensions)
-    img = np.array(pad(img).convert('RGB'))
+    padded = minmax_size(pad(img), args.max_dimensions, args.min_dimensions)
+    img = np.array(padded.convert('RGB'))
     t = test_transform(image=img)['image'][:1].unsqueeze(0)
     im = t.to("cpu")
 
@@ -174,7 +174,9 @@ def call_model(args, model, tokenizer, img=None):
         if not isinstance(pred, str) or pred.strip() == "":
             return "[Unrecognized]"
         return pred
-    except Exception:
+    except Exception as e:
+        # Log full exception so calling UI/process can reveal root cause in logs
+        logging.exception("Recognition model failed during inference:")
         # Robust fallback to avoid crashing UI
         return "[Unrecognized]"
 

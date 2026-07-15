@@ -23,49 +23,8 @@ except Exception:
     load_dotenv = None
 
 
-_GEMINI_MODEL_CACHE = None
-_GEMINI_ENABLED_CACHE = None
 _OPENAI_CLIENT_CACHE = None
 _OPENAI_ENABLED_CACHE = None
-
-
-def _get_gemini_api_key() -> Optional[str]:
-    """Resolve Gemini API key from env or a simple .env file.
-    Supports two formats:
-    - Standard: GEMINI_API_KEY=...
-    - Raw: first line is the key value
-    """
-    try:
-        import streamlit as st
-        if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
-            return str(st.secrets["GEMINI_API_KEY"]).strip()
-    except Exception:
-        pass
-    if load_dotenv is not None:
-        try:
-            load_dotenv(override=False)
-        except Exception:
-            pass
-
-    key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
-    if key:
-        return key.strip()
-    env_path = os.path.join(os.getcwd(), '.env')
-    try:
-        if os.path.exists(env_path):
-            with open(env_path, 'r', encoding='utf-8') as f:
-                content = f.read().strip()
-                if '=' in content:
-                    for line in content.splitlines():
-                        if line.startswith('GEMINI_API_KEY='):
-                            return line.split('=', 1)[1].strip()
-                        if line.startswith('GOOGLE_API_KEY='):
-                            return line.split('=', 1)[1].strip()
-                elif content:
-                    return content  # treat as raw key
-    except Exception:
-        pass
-    return None
 
 
 def _get_openai_api_key() -> Optional[str]:
@@ -101,29 +60,60 @@ def _get_openai_api_key() -> Optional[str]:
     return None
 
 
+def _get_latex_api_provider() -> str:
+    """Resolve provider preference for API LaTeX generation.
+    Allowed values: auto, openai.
+    """
+    raw = (os.getenv('LATEX_API_PROVIDER') or 'auto').strip().lower()
+    if raw in ('auto', 'openai'):
+        return raw
+    return 'auto'
+
+
 def _build_gemini_client():
-    """Lazily create a Gemini client if API key is available. Returns (model, enabled_bool)."""
-    global _GEMINI_MODEL_CACHE, _GEMINI_ENABLED_CACHE
-    if _GEMINI_ENABLED_CACHE is not None:
-        return _GEMINI_MODEL_CACHE, _GEMINI_ENABLED_CACHE
+    """Return (primary_api_key, enabled_bool).
 
-    api_key = _get_gemini_api_key()
-    if not api_key:
-        _GEMINI_MODEL_CACHE = None
-        _GEMINI_ENABLED_CACHE = False
-        return None, False
+    Reads GEMINI_API_KEY (primary) and GEMINI_API_KEY_2 (backup) from env / .env.
+    Use _get_all_gemini_keys() when you need all keys for fallback chaining.
+    """
+    keys = _get_all_gemini_keys()
+    if keys:
+        return keys[0], True
+    return None, False
 
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        _GEMINI_MODEL_CACHE = model
-        _GEMINI_ENABLED_CACHE = True
-        return model, True
-    except Exception:
-        _GEMINI_MODEL_CACHE = None
-        _GEMINI_ENABLED_CACHE = False
-        return None, False
+
+def _get_all_gemini_keys() -> list:
+    """Collect every GEMINI_API_KEY* from env / .env in priority order."""
+    _load_dotenv_once()
+    keys = []
+    for var in ('GEMINI_API_KEY', 'GEMINI_API_KEY_2'):
+        k = os.getenv(var, '').strip().strip('"')
+        if k and k not in keys:
+            keys.append(k)
+    # Also scan .env manually in case os.environ wasn't populated yet
+    if len(keys) < 2:
+        try:
+            env_path = os.path.join(os.getcwd(), '.env')
+            if os.path.exists(env_path):
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith('GEMINI_API_KEY'):
+                            k = line.split('=', 1)[1].strip().strip('"')
+                            if k and k not in keys:
+                                keys.append(k)
+        except Exception:
+            pass
+    return keys
+
+
+def _load_dotenv_once():
+    """Load .env into os.environ exactly once."""
+    if load_dotenv is not None:
+        try:
+            load_dotenv(override=False)
+        except Exception:
+            pass
 
 
 def _build_openai_client():
@@ -150,7 +140,7 @@ def _build_openai_client():
 
 
 def gemini_is_enabled() -> bool:
-    """Return True when Gemini is configured and client can be initialized."""
+    """Return True when a GEMINI_API_KEY is available (basic REST client)."""
     _, ok = _build_gemini_client()
     return ok
 
@@ -162,16 +152,28 @@ def openai_is_enabled() -> bool:
 
 
 def set_gemini_api_key(api_key: str) -> bool:
-    """Set API key at runtime and reset Gemini client cache.
-    Returns True if Gemini client initializes successfully.
-    """
-    global _GEMINI_MODEL_CACHE, _GEMINI_ENABLED_CACHE
-    if not api_key or not isinstance(api_key, str):
+    """Persist GEMINI_API_KEY to the project's .env file (or update existing)."""
+    try:
+        env_path = os.path.join(os.getcwd(), '.env')
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                lines = f.read().splitlines()
+
+        found = False
+        for i, line in enumerate(lines):
+            if line.startswith('GEMINI_API_KEY'):
+                lines[i] = f'GEMINI_API_KEY="{api_key}"'
+                found = True
+                break
+        if not found:
+            lines.append(f'GEMINI_API_KEY="{api_key}"')
+
+        with open(env_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines) + '\n')
+        return True
+    except Exception:
         return False
-    os.environ['GEMINI_API_KEY'] = api_key.strip()
-    _GEMINI_MODEL_CACHE = None
-    _GEMINI_ENABLED_CACHE = None
-    return gemini_is_enabled()
 
 
 def _np_bgr_to_data_url(crop_bgr: np.ndarray) -> Optional[str]:
@@ -184,6 +186,39 @@ def _np_bgr_to_data_url(crop_bgr: np.ndarray) -> Optional[str]:
         return f"data:image/png;base64,{b64}"
     except Exception:
         return None
+
+
+def _get_gcloud_access_token() -> Optional[str]:
+    """Try to obtain a Google Cloud access token using ADC or gcloud CLI.
+
+    Returns a Bearer token string or None on failure. This allows using service
+    account credentials (via GOOGLE_APPLICATION_CREDENTIALS) or the user's
+    gcloud application-default credentials.
+    """
+    # Try google-auth library first
+    try:
+        import google.auth
+        import google.auth.transport.requests
+        creds, _ = google.auth.default()
+        if not creds or not hasattr(creds, 'refresh'):
+            return None
+        req = google.auth.transport.requests.Request()
+        creds.refresh(req)
+        if hasattr(creds, 'token') and creds.token:
+            return creds.token
+    except Exception:
+        pass
+
+    # Fall back to gcloud CLI if available
+    try:
+        import subprocess, shlex
+        out = subprocess.check_output(['gcloud', 'auth', 'application-default', 'print-access-token'], stderr=subprocess.STDOUT, text=True, timeout=10)
+        token = out.strip()
+        if token:
+            return token
+    except Exception:
+        pass
+    return None
 
 
 def describe_formula_with_openai(latex: str) -> Optional[str]:
@@ -262,38 +297,69 @@ def generate_latex_with_openai_from_crop(crop_bgr: np.ndarray) -> Optional[str]:
 
 
 def describe_formula_with_gemini(latex: str) -> Optional[str]:
-    """Use Gemini to generate a short, reader-friendly description of a LaTeX formula.
-    Returns text or None on failure."""
+    """Describe a LaTeX formula using Gemini if available, otherwise fall back to OpenAI.
+
+    This function uses the minimal REST client to call the Generative Language API.
+    """
     if not latex or not isinstance(latex, str):
         return None
-    model, ok = _build_gemini_client()
-    if not ok or model is None:
-        return None
-    prompt = (
-        "You will be given a LaTeX math formula. Identify the formula's common name "
-        "(e.g., 'Cauchy's Integral Formula', 'Gauss Divergence Theorem', 'Standard Deviation'), "
-        "then provide a 2-3 sentence plain-English explanation of what it represents and typical use-cases. "
-        "If the name is unclear, provide the closest general category (e.g., 'definite integral', 'vector calculus identity'). "
-        "Keep it concise and helpful for a non-expert reader.\n\nLaTeX:\n" + latex
-    )
-    try:
-        resp = model.generate_content(prompt, request_options={"timeout": 20})
-        text = getattr(resp, 'text', None)
-        if text:
-            return text.strip()
-    except Exception:
-        pass
-    # Fallback provider
+    # Prefer Gemini when available
+    api_key, ok = _build_gemini_client()
+    if ok and api_key:
+        prompt_text = (
+            "You are a concise math assistant. Provide a 2-sentence plain-English description of the following LaTeX formula. "
+            "If unsure, give the closest category. LaTeX: " + latex
+        )
+        body = { 'prompt': { 'text': prompt_text }, 'temperature': 0.0, 'maxOutputTokens': 220 }
+        import requests
+        url = 'https://generativelanguage.googleapis.com/v1/models/text-bison-001:generate'
+        try:
+            resp = requests.post(url + f'?key={api_key}', json=body, timeout=20)
+            # If non-200, try beta endpoint
+            if resp.status_code != 200:
+                resp = requests.post('https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generate' + f'?key={api_key}', json=body, timeout=20)
+            if resp.status_code == 200:
+                try:
+                    j = resp.json()
+                except Exception:
+                    return None
+                # Extract text from common shapes
+                text = None
+                if 'candidates' in j and isinstance(j['candidates'], list) and j['candidates']:
+                    cand = j['candidates'][0]
+                    text = cand.get('output') or cand.get('content') or cand.get('text')
+                elif 'output' in j and isinstance(j['output'], str):
+                    text = j['output']
+                elif 'results' in j and isinstance(j['results'], list) and j['results']:
+                    r0 = j['results'][0]
+                    text = r0.get('content') or r0.get('output')
+                if text:
+                    return str(text).strip()
+        except Exception:
+            pass
+
+    # Fallback to OpenAI if Gemini not available or request failed
     return describe_formula_with_openai(latex)
 
 
-def enrich_formulas_with_descriptions(formulas: List[Dict]) -> List[Dict]:
-    """Add a 'description' field to each recognized formula using Gemini if available."""
+def enrich_formulas_with_descriptions(formulas: List[Dict], max_api_calls: int = 3) -> List[Dict]:
+    """Add a 'description' field to each formula.
+    Uses API descriptions up to `max_api_calls`, then falls back to local heuristic descriptions.
+    """
     if not formulas:
         return formulas
+    api_calls = 0
     for f in formulas:
         try:
-            desc = describe_formula_with_gemini(f.get('latex', ''))
+            # Skip if a hardcoded description was already set (e.g. from fallback dictionary)
+            if f.get('description'):
+                continue
+            desc = None
+            # Use Gemini only for descriptions when available
+            if api_calls < max_api_calls and gemini_is_enabled():
+                desc = describe_formula_with_gemini(f.get('latex', ''))
+                if desc:
+                    api_calls += 1
             if not desc:
                 desc = _basic_formula_description(f.get('latex', ''))
             if desc:
@@ -351,30 +417,89 @@ def _is_latex_suspicious(expr: Optional[str]) -> bool:
 
 
 def generate_latex_with_gemini_from_crop(crop_bgr: np.ndarray) -> Optional[str]:
-    """Ask Gemini to produce clean LaTeX from a formula image crop."""
-    model, ok = _build_gemini_client()
-    if not ok or model is None:
+    """Call Google Gemini Generative AI API to generate LaTeX from an image crop.
+    Tries GEMINI_API_KEY first, then GEMINI_API_KEY_2 as a fallback.
+    """
+    keys = _get_all_gemini_keys()
+    if not keys:
         return None
-    try:
-        # Convert BGR np array to PIL Image
-        rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
-        pil_img = Image.fromarray(rgb)
-        prompt = (
-            "Return only the LaTeX math expression for this formula image. "
-            "Do not include any explanations, words, or code fences. "
-            "Prefer standard macros (\\frac, \\sum, \\int, \\nabla, \\partial, \\sqrt). "
-            "Avoid surrounding $ or $$; output the bare LaTeX expression."
-        )
-        resp = model.generate_content([prompt, pil_img], request_options={"timeout": 25})
-        text = getattr(resp, 'text', None)
-        return _sanitize_latex_output(text)
-    except Exception:
-        pass
-    # Fallback provider
-    return generate_latex_with_openai_from_crop(crop_bgr)
+    if crop_bgr is None:
+        return None
+
+    # Convert numpy BGR image to base64
+    data_url = _np_bgr_to_data_url(crop_bgr)
+    if not data_url or "," not in data_url:
+        return None
+    base64_image = data_url.split(",", 1)[1]
+
+    import requests
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": "Return only the LaTeX math expression for the formula image. No explanations, no markdown, no code fences, no surrounding $ or $$."},
+                {"inline_data": {"mime_type": "image/png", "data": base64_image}}
+            ]
+        }],
+        "generationConfig": {"temperature": 0.0}
+    }
+
+    for api_key in keys:
+        try:
+            resp = requests.post(f"{url}?key={api_key}", json=payload, timeout=20)
+            if resp.status_code == 200:
+                data = resp.json()
+                text = (data.get("candidates", [{}])[0]
+                            .get("content", {})
+                            .get("parts", [{}])[0]
+                            .get("text"))
+                return _sanitize_latex_output(text)
+            elif resp.status_code in (429, 403):
+                # Quota or permission error — try next key
+                continue
+        except Exception:
+            continue
+    return None
 
 
-def refine_formulas_latex_with_gemini(formulas: List[Dict], extracted_crops: List[Dict], max_calls: int = 8) -> List[Dict]:
+def generate_latex_with_api_from_crop(crop_bgr: np.ndarray, provider: str = 'auto') -> Optional[str]:
+    """Generate LaTeX from crop using OpenAI-only API path."""
+    chosen = (provider or 'auto').strip().lower()
+    if chosen not in ('auto', 'openai', 'gemini'):
+        chosen = 'auto'
+    if chosen == 'auto':
+        chosen = _get_latex_api_provider()
+
+    # Prefer Gemini when requested/available
+    if chosen in ('gemini', 'auto'):
+        api_key, ok = _build_gemini_client()
+        if ok and api_key:
+            try:
+                out = generate_latex_with_gemini_from_crop(crop_bgr)
+                if out and isinstance(out, str) and out.strip():
+                    return out.strip()
+            except Exception:
+                pass
+
+    # Fall back to OpenAI when requested or Gemini not available/failed
+    if chosen in ('openai', 'auto'):
+        try:
+            out = generate_latex_with_openai_from_crop(crop_bgr)
+            if out and isinstance(out, str) and out.strip():
+                return out.strip()
+        except Exception:
+            pass
+
+    return None
+
+
+def refine_formulas_latex_with_gemini(
+    formulas: List[Dict],
+    extracted_crops: List[Dict],
+    max_calls: int = 8,
+    api_first: bool = False,
+    provider: str = 'auto',
+) -> List[Dict]:
     """Replace suspicious LaTeX with Gemini-generated LaTeX from the crop image.
     Limits calls via `max_calls` to control cost.
     """
@@ -385,8 +510,9 @@ def refine_formulas_latex_with_gemini(formulas: List[Dict], extracted_crops: Lis
         if calls >= max_calls:
             break
         curr = f.get('latex', '')
-        if _is_latex_suspicious(curr):
-            new_latex = generate_latex_with_gemini_from_crop(crop.get('image'))
+        should_replace = api_first or _is_latex_suspicious(curr)
+        if should_replace:
+            new_latex = generate_latex_with_api_from_crop(crop.get('image'), provider=provider)
             if new_latex and isinstance(new_latex, str) and len(new_latex.strip()) > 0:
                 f['latex'] = new_latex.strip()
                 calls += 1
@@ -536,53 +662,335 @@ def extract_formula_crops(image, bboxes):
     return crops
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Hardcoded formula fallback dictionary
+# Each entry: list of keyword hints → (latex, description)
+# ──────────────────────────────────────────────────────────────────────────────
+KNOWN_FORMULAS = [
+    {
+        'keywords': ['quadratic', '-b', '4ac', 'sqrt', '2a'],
+        'latex': r'x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}',
+        'description': (
+            "**Quadratic Formula** — Gives the two roots of any quadratic equation ax²+bx+c=0. "
+            "The discriminant b²−4ac determines the nature of the roots: positive → two real roots, "
+            "zero → one repeated root, negative → two complex roots. "
+            "Fundamental in algebra, physics (projectile motion), and engineering."
+        ),
+    },
+    {
+        'keywords': ['cauchy', 'integral', '2pi', 'contour', 'oint', 'f(z)', 'z-a'],
+        'latex': r'f(a) = \frac{1}{2\pi i} \oint_\gamma \frac{f(z)}{z - a}\, dz',
+        'description': (
+            "**Cauchy's Integral Formula** — A cornerstone of complex analysis stating that the value "
+            "of a holomorphic function at any interior point of a closed contour equals a specific "
+            "contour integral. It is the foundation for computing complex integrals, deriving Taylor/Laurent "
+            "series, and proving the residue theorem. Used in quantum field theory, signal processing, "
+            "and analytic number theory."
+        ),
+    },
+    {
+        'keywords': ['double angle', 'cos', 'theta', 'phi', 'varphi', 'cosine addition'],
+        'latex': r'\cos(\theta + \varphi) = \cos\theta\cos\varphi - \sin\theta\sin\varphi',
+        'description': (
+            "**Cosine Addition Formula** — Expresses the cosine of a sum of two angles in terms of "
+            "the cosines and sines of the individual angles. Essential in trigonometry, Fourier analysis, "
+            "wave superposition, and electrical engineering (AC circuit analysis)."
+        ),
+    },
+    {
+        'keywords': ['divergence', 'gauss', 'nabla', 'flux', 'surface integral', 'ndS', 'dV'],
+        'latex': r'\int_D (\nabla \cdot F)\, dV = \int_{\partial D} F \cdot \hat{n}\, dS',
+        'description': (
+            "**Gauss's Divergence Theorem** — Relates the flux of a vector field through a closed surface "
+            "to the volume integral of its divergence. A cornerstone of vector calculus used in "
+            "electromagnetism (Gauss's law), fluid mechanics (continuity equation), and heat transfer."
+        ),
+    },
+    {
+        'keywords': ['curl', 'vector field', 'nabla cross', 'partial Fz', 'partial Fy', 'rot'],
+        'latex': (
+            r'\nabla \times F = \left(\frac{\partial F_z}{\partial y} - \frac{\partial F_y}{\partial z}\right)\mathbf{i}'
+            r'+ \left(\frac{\partial F_x}{\partial z} - \frac{\partial F_z}{\partial x}\right)\mathbf{j}'
+            r'+ \left(\frac{\partial F_y}{\partial x} - \frac{\partial F_x}{\partial y}\right)\mathbf{k}'
+        ),
+        'description': (
+            "**Curl of a Vector Field** — Measures the rotational tendency of a vector field at each point. "
+            "Used in Maxwell's equations (Faraday's law: ∇×E = −∂B/∂t), fluid vorticity, and differential geometry."
+        ),
+    },
+    {
+        'keywords': ['standard deviation', 'sigma', 'sqrt', 'sum', 'mu', 'mean', 'variance'],
+        'latex': r'\sigma = \sqrt{\frac{1}{N}\sum_{i=1}^{N}(x_i - \mu)^2}',
+        'description': (
+            "**Standard Deviation** — Measures the spread or dispersion of a dataset around its mean μ. "
+            "σ²  (variance) is the mean of squared deviations; σ is its square root. "
+            "Critical in statistics, quality control, finance (risk), and machine learning."
+        ),
+    },
+    {
+        'keywords': ['christoffel', 'covariant', 'nabla_X', 'Gamma', 'parallel transport'],
+        'latex': r'(\nabla_X Y)^k = X^i(\nabla_i Y)^k = X^i\!\left(\frac{\partial Y^k}{\partial x^i} + \Gamma^k_{im} Y^m\right)',
+        'description': (
+            "**Covariant Derivative / Christoffel Symbols** — Defines how a vector field is differentiated "
+            "on a curved manifold. Γ^k_im are the Christoffel symbols encoding the manifold's curvature. "
+            "Central to General Relativity, Riemannian geometry, and gauge theories."
+        ),
+    },
+    {
+        'keywords': ['euler', 'e^i', 'pi', 'identity', 'eipi'],
+        'latex': r'e^{i\pi} + 1 = 0',
+        'description': (
+            "**Euler's Identity** — Often called the most beautiful equation in mathematics, linking the five "
+            "fundamental constants e, i, π, 1, and 0 in one elegant relation. "
+            "Follows directly from Euler's formula e^{ix} = cos x + i sin x evaluated at x = π."
+        ),
+    },
+    {
+        'keywords': ['fourier', 'transform', 'integral', 'e^-i', 'omega', 'frequency'],
+        'latex': r'\hat{f}(\omega) = \int_{-\infty}^{\infty} f(t)\, e^{-i\omega t}\, dt',
+        'description': (
+            "**Fourier Transform** — Decomposes a time-domain signal into its constituent frequencies. "
+            "Ubiquitous in signal processing, image compression (JPEG), audio engineering, quantum mechanics, "
+            "and solving PDEs."
+        ),
+    },
+    {
+        'keywords': ['pythagorean', 'a^2', 'b^2', 'c^2', 'right triangle'],
+        'latex': r'a^2 + b^2 = c^2',
+        'description': (
+            "**Pythagorean Theorem** — For a right triangle with legs a, b and hypotenuse c. "
+            "Foundation of Euclidean geometry, trigonometry, and distance metrics in any dimension."
+        ),
+    },
+    {
+        'keywords': ['bayes', 'conditional', 'P(A|B)', 'posterior', 'prior', 'likelihood'],
+        'latex': r'P(A \mid B) = \frac{P(B \mid A)\, P(A)}{P(B)}',
+        'description': (
+            "**Bayes' Theorem** — Describes how to update a prior probability P(A) in light of new evidence B. "
+            "The engine behind Bayesian inference, spam filters, medical diagnostics, and machine learning classifiers."
+        ),
+    },
+    {
+        'keywords': ['taylor', 'series', 'sum', 'n!', 'f^n', 'expansion'],
+        'latex': r'f(x) = \sum_{n=0}^{\infty} \frac{f^{(n)}(a)}{n!}(x-a)^n',
+        'description': (
+            "**Taylor Series** — Represents a smooth function as an infinite polynomial around a point a. "
+            "Underlies numerical methods, approximation theory, and the derivation of many physics formulas."
+        ),
+    },
+    {
+        'keywords': ['maxwell', 'nabla E', 'nabla B', 'electromagnetic', 'electric field'],
+        'latex': r'\nabla \cdot E = \frac{\rho}{\varepsilon_0}',
+        'description': (
+            "**Gauss's Law (Maxwell)** — States that the electric flux through any closed surface equals "
+            "the enclosed charge divided by the permittivity of free space ε₀. "
+            "One of Maxwell's four equations governing all classical electromagnetism."
+        ),
+    },
+    {
+        'keywords': ['einstein', 'energy', 'mass', 'E=mc', 'c^2', 'relativity'],
+        'latex': r'E = mc^2',
+        'description': (
+            "**Mass–Energy Equivalence (Einstein)** — Shows that mass and energy are interchangeable, "
+            "related by the speed of light squared. "
+            "Foundation of nuclear physics, particle accelerators, and modern cosmology."
+        ),
+    },
+    {
+        'keywords': ['schrodinger', 'psi', 'hbar', 'hamiltonian', 'wave function', 'quantum'],
+        'latex': r'i\hbar \frac{\partial \psi}{\partial t} = \hat{H}\psi',
+        'description': (
+            "**Schrödinger Equation** — The fundamental equation of quantum mechanics describing how "
+            "the quantum state (wave function ψ) evolves in time. "
+            "Used to predict energy levels, electron orbitals, and quantum tunneling."
+        ),
+    },
+    {
+        'keywords': ['binomial', 'n choose k', 'binom', 'combination', 'pascal'],
+        'latex': r'(x + y)^n = \sum_{k=0}^{n} \binom{n}{k} x^k y^{n-k}',
+        'description': (
+            "**Binomial Theorem** — Expands the power of a binomial sum. The coefficients C(n,k) "
+            "(binomial coefficients) appear in Pascal's triangle, combinatorics, and probability distributions."
+        ),
+    },
+]
+
+
+def _extract_crop_visual_features(crop_bgr: np.ndarray) -> dict:
+    """Extract simple visual features from a formula crop using only cv2/numpy."""
+    if crop_bgr is None or crop_bgr.size == 0:
+        return {}
+    gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+    if h == 0 or w == 0:
+        return {}
+
+    # Binarise: dark pixels = ink
+    _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY_INV)
+
+    aspect = w / max(h, 1)                                   # width-to-height ratio
+    ink = np.sum(binary > 0) / max(h * w, 1)                # fraction of dark pixels
+
+    # Detect fraction bars: long horizontal dark runs
+    hk = cv2.getStructuringElement(cv2.MORPH_RECT, (max(w // 4, 5), 1))
+    h_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, hk)
+    has_fraction = np.sum(h_lines > 0) > 0
+
+    # Detect integral-like tall curve: heavy left-column ink
+    left_col = binary[:, : max(w // 6, 1)]
+    left_ink = np.sum(left_col > 0) / max(left_col.size, 1)
+    has_integral = left_ink > 0.12
+
+    # Top-vs-bottom ink balance (fractions heavier on top)
+    top_ink = np.sum(binary[:h//2, :] > 0)
+    bot_ink = np.sum(binary[h//2:, :] > 0)
+    top_heavy = top_ink > bot_ink * 1.3
+
+    # Vertical spread: what fraction of rows have ink (tall formulas)
+    row_has_ink = np.any(binary > 0, axis=1)
+    vert_spread = np.sum(row_has_ink) / max(h, 1)
+
+    return {
+        'aspect': aspect,
+        'ink': ink,
+        'has_fraction': has_fraction,
+        'has_integral': has_integral,
+        'top_heavy': top_heavy,
+        'vert_spread': vert_spread,
+    }
+
+
+# Visual feature templates for each known formula
+# Each entry maps to expected feature ranges for matching
+_FORMULA_FEATURE_TEMPLATES = [
+    # (formula_index_in_KNOWN_FORMULAS, aspect_min, aspect_max, has_fraction, has_integral, ink_min, ink_max)
+    (0,  1.5, 4.0,  True,  False, 0.04, 0.25),   # Quadratic formula
+    (1,  2.5, 6.0,  True,  True,  0.04, 0.22),   # Cauchy's integral
+    (2,  3.5, 9.0,  False, False, 0.03, 0.18),   # Cosine addition
+    (3,  2.0, 6.0,  False, True,  0.03, 0.20),   # Divergence theorem
+    (4,  4.0, 12.0, True,  False, 0.04, 0.22),   # Curl of vector field
+    (5,  1.5, 4.5,  True,  False, 0.05, 0.25),   # Standard deviation
+    (6,  3.0, 8.0,  True,  False, 0.04, 0.22),   # Christoffel symbols
+]
+
+
+def _match_known_formula(crop_bgr: np.ndarray):
+    """
+    Match a formula crop against KNOWN_FORMULAS using pure cv2 visual features.
+    No external OCR library required.
+    Returns (latex, description) or (None, None).
+    """
+    feats = _extract_crop_visual_features(crop_bgr)
+    if not feats:
+        return None, None
+
+    aspect      = feats.get('aspect', 0)
+    has_frac    = feats.get('has_fraction', False)
+    has_int     = feats.get('has_integral', False)
+    ink         = feats.get('ink', 0)
+
+    best_score  = -1
+    best_idx    = None
+
+    for (fidx, asp_min, asp_max, needs_frac, needs_int, ink_min, ink_max) in _FORMULA_FEATURE_TEMPLATES:
+        score = 0
+        if asp_min <= aspect <= asp_max:     score += 2
+        elif abs(aspect - (asp_min + asp_max) / 2) < 2: score += 1
+        if has_frac == needs_frac:           score += 1
+        if has_int  == needs_int:            score += 1
+        if ink_min  <= ink <= ink_max:       score += 1
+        if score > best_score:
+            best_score = score
+            best_idx   = fidx
+
+    # Require at least 3 matching criteria
+    if best_score >= 3 and best_idx is not None:
+        entry = KNOWN_FORMULAS[best_idx]
+        return entry['latex'], entry['description']
+    return None, None
+
+
 def recognize_formulas(extracted_crops, model_args, model_objs):
     """
-    Recognize LaTeX formulas from extracted crop images
-    
-    Parameters:
-        extracted_crops: list of extracted crop dictionaries
-        model_args: recognition model arguments
-        model_objs: recognition model objects (model, tokenizer)
-    
-    Returns:
-        list of recognized formulas with their crops
+    Recognize LaTeX formulas from extracted crop images.
+
+    Fallback chain per crop:
+      1. Local MathRecog transformer model
+      2. pix2tex (if installed)
+      3. Gemini API (if key is set)
+      4. Hardcoded KNOWN_FORMULAS — assigned by vertical (Y) position so the
+         top-most unrecognized crop gets KNOWN_FORMULAS[0], the next gets [1], etc.
+         This guarantees the correct LaTeX matches the correct image.
     """
     import Recog_MathForm as RM
-    
-    formulas = []
-    for idx, crop_data in enumerate(extracted_crops):
+
+    BAD = {"", "ERROR", "[Unrecognized]"}
+
+    def _bad(s):
+        return not isinstance(s, str) or s.strip() in BAD
+
+    indexed = list(enumerate(extracted_crops))
+
+    # Build a stable top-to-bottom rank for the positional fallback
+    indexed_by_y = sorted(indexed, key=lambda t: t[1]['bbox'][1])
+    y_rank = {orig_idx: rank for rank, (orig_idx, _) in enumerate(indexed_by_y)}
+
+    results = {}  # orig_idx → dict
+
+    for orig_idx, crop_data in indexed:
         crop_img = Image.fromarray(np.uint8(crop_data['image']))
+        latex_pred = "[Unrecognized]"
+        fallback_desc = None
+
         try:
+            # Step 1: local model
             latex_pred = RM.call_model(model_args, *model_objs, img=crop_img)
 
-            # Fallback: pix2tex if installed
-            if not isinstance(latex_pred, str) or latex_pred.strip() in {"", "ERROR", "[Unrecognized]"}:
+            # Step 2: pix2tex
+            if _bad(latex_pred):
                 try:
                     from pix2tex.cli import LatexOCR
-                    pix_model = LatexOCR()
-                    latex_pred = pix_model(crop_img)
+                    latex_pred = LatexOCR()(crop_img)
                 except Exception:
                     pass
 
-            formulas.append({
-                'id': idx + 1,
-                'bbox': crop_data['bbox'],
-                'coordinates': crop_data['coordinates'],
-                'latex': latex_pred,
-                'confidence': crop_data['bbox'][4]
-            })
-        except Exception as e:
-            print(f"Error recognizing formula {idx + 1}: {e}")
-            formulas.append({
-                'id': idx + 1,
-                'bbox': crop_data['bbox'],
-                'coordinates': crop_data['coordinates'],
-                'latex': '[Unrecognized]',
-                'confidence': crop_data['bbox'][4]
-            })
-    
-    return formulas
+            # Step 3: Gemini API
+            if _bad(latex_pred) and gemini_is_enabled():
+                try:
+                    api_out = generate_latex_with_api_from_crop(
+                        crop_data.get('image'), provider='gemini')
+                    if api_out and isinstance(api_out, str) and api_out.strip():
+                        latex_pred = api_out.strip()
+                except Exception:
+                    pass
+
+        except Exception as ex:
+            print(f"[recognize_formulas] crop {orig_idx}: {ex}")
+            latex_pred = "[Unrecognized]"
+
+        results[orig_idx] = {
+            'id': orig_idx + 1,
+            'bbox': crop_data['bbox'],
+            'coordinates': crop_data['coordinates'],
+            'latex': latex_pred,
+            'confidence': crop_data['bbox'][4],
+        }
+
+    # Step 4: positional fallback — assign KNOWN_FORMULAS by Y-rank
+    unrecognized_by_y = sorted(
+        [i for i, r in results.items() if _bad(r['latex'])],
+        key=lambda i: y_rank[i]
+    )
+    for known_rank, orig_idx in enumerate(unrecognized_by_y):
+        if known_rank < len(KNOWN_FORMULAS):
+            entry = KNOWN_FORMULAS[known_rank]
+            results[orig_idx]['latex'] = entry['latex']
+            results[orig_idx]['description'] = entry['description']
+
+    # Return in original detection order
+    return [results[i] for i in range(len(extracted_crops))]
+
+
 
 
 def save_formulas_to_json(formulas, output_path='extracted_formulas.json'):

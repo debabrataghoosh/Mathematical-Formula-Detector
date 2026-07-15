@@ -181,7 +181,14 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114)):
     im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
     return im, ratio, (dw, dh)
 
-def predict_formulas(img, model):
+def predict_formulas(
+    img,
+    model,
+    conf_thres=0.40,
+    nms_iou_thres=0.60,
+    duplicate_iou_thres=0.45,
+    min_area_ratio=0.00008,
+):
     '''
     Description:
         Pipeline to detect the math formulas inside given image
@@ -200,8 +207,7 @@ def predict_formulas(img, model):
 
     # Inference model
     pred = model(mod_img)[0]
-    # Apply NMS for clean detections (high threshold to merge duplicates)
-    pred = non_max_suppression(pred, 0.32, 0.75)
+    pred = non_max_suppression(pred, conf_thres, nms_iou_thres)
     
     bboxes = []
     
@@ -211,14 +217,82 @@ def predict_formulas(img, model):
             det[:, :4] = scale_coords(mod_img.shape[2:], det[:, :4], img.shape).round()
             # Write results
             for *xyxy, conf, cls in reversed(det):
-                if conf < 0.32 or int(cls.item()) != 0:
+                if conf < conf_thres or int(cls.item()) != 0:
                     continue
                 bboxes.append([xyxy[0].item(),xyxy[1].item(),xyxy[2].item(),xyxy[3].item(),conf.item(), cls.item()])
-    
-    # Post-process: Remove duplicates with aggressive overlap filtering
-    bboxes = remove_duplicate_boxes(bboxes, iou_threshold=0.3)
+
+    # Remove tiny detections that are usually punctuation/noise.
+    bboxes = filter_small_boxes(bboxes, img.shape, min_area_ratio=min_area_ratio)
+
+    # Post-process: Remove duplicates with overlap filtering.
+    bboxes = remove_duplicate_boxes(bboxes, iou_threshold=duplicate_iou_thres)
+
+    # Remove nested boxes that often appear as redundant detections.
+    bboxes = remove_contained_boxes(bboxes, containment_ratio=0.88)
     
     return bboxes
+
+
+def box_area(box):
+    return max(0.0, (box[2] - box[0])) * max(0.0, (box[3] - box[1]))
+
+
+def filter_small_boxes(bboxes, image_shape, min_area_ratio=0.00008):
+    if len(bboxes) == 0:
+        return bboxes
+
+    img_h, img_w = image_shape[:2]
+    img_area = float(img_h * img_w)
+    min_area = max(80.0, img_area * float(min_area_ratio))
+    filtered = []
+
+    for box in bboxes:
+        w = box[2] - box[0]
+        h = box[3] - box[1]
+        area = w * h
+        if w < 8 or h < 8:
+            continue
+        if area < min_area:
+            continue
+        filtered.append(box)
+
+    return filtered
+
+
+def intersection_area(box1, box2):
+    inter_xmin = max(box1[0], box2[0])
+    inter_ymin = max(box1[1], box2[1])
+    inter_xmax = min(box1[2], box2[2])
+    inter_ymax = min(box1[3], box2[3])
+
+    if inter_xmax <= inter_xmin or inter_ymax <= inter_ymin:
+        return 0.0
+    return float(inter_xmax - inter_xmin) * float(inter_ymax - inter_ymin)
+
+
+def remove_contained_boxes(bboxes, containment_ratio=0.88):
+    if len(bboxes) <= 1:
+        return bboxes
+
+    bboxes_sorted = sorted(bboxes, key=lambda x: x[4], reverse=True)
+    kept = []
+
+    for cand in bboxes_sorted:
+        cand_area = box_area(cand)
+        if cand_area <= 0:
+            continue
+
+        contained = False
+        for existing in kept:
+            inter = intersection_area(cand, existing)
+            if inter / cand_area >= containment_ratio:
+                contained = True
+                break
+
+        if not contained:
+            kept.append(cand)
+
+    return kept
 
 
 def remove_duplicate_boxes(bboxes, iou_threshold=0.3):

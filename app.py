@@ -79,106 +79,950 @@ def render_latex_block(latex_text):
         st.code(normalized, language='latex')
 
 if __name__ == '__main__':
-    st.set_page_config(page_title="Math Formula Detection", page_icon="➗", layout="wide")
+    st.set_page_config(page_title="Math Formula Detection", page_icon="∑", layout="wide")
     download_models()
 
-    st.markdown(
-        """
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap');
+    # ── CSS ──────────────────────────────────────────────────────────────────────
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-        :root {
-            --bg-0: #081018;
-            --bg-1: #0e1622;
-            --panel: rgba(18, 27, 40, 0.86);
-            --panel-2: rgba(14, 22, 34, 0.92);
-            --line: rgba(113, 146, 181, 0.28);
-            --text: #eaf2ff;
-            --text-soft: #9cb3cc;
+    :root {
+        --bg:        #08101a;
+        --surface:   rgba(255,255,255,0.04);
+        --border:    rgba(255,255,255,0.08);
+        --border-hi: rgba(29,211,176,0.5);
+        --accent:    #1dd3b0;
+        --accent2:   #00c6ff;
+        --text:      #e8f0f8;
+        --muted:     #7a90a8;
+        --radius:    14px;
+    }
+
+    /* ── Global ── */
+    html, body, [class*="css"] {
+        font-family: 'Inter', system-ui, sans-serif !important;
+        color: var(--text) !important;
+    }
+    .main, section.main {
+        background: radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0,198,255,.10) 0%, transparent 60%),
+                    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(29,211,176,.08) 0%, transparent 60%),
+                    #08101a !important;
+    }
+    .block-container {
+        padding: 2rem 3rem 4rem !important;
+        max-width: none !important;
+    }
+
+    /* ── Sidebar ── */
+    [data-testid="stSidebar"] {
+        background: #060e18 !important;
+        border-right: 1px solid var(--border) !important;
+    }
+    [data-testid="stSidebar"] * { color: var(--text) !important; }
+    [data-testid="stSidebar"] .stMarkdown p {
+        font-size: 0.75rem !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.1em !important;
+        color: var(--muted) !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    /* ── Headings ── */
+    h1,h2,h3,h4 {
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.02em !important;
+        color: var(--text) !important;
+    }
+
+    /* ── Hero ── */
+    .hero {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.6rem 1.8rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        margin-bottom: 1.5rem;
+        backdrop-filter: blur(12px);
+    }
+    .hero-icon {
+        width: 48px; height: 48px;
+        background: linear-gradient(135deg, var(--accent), var(--accent2));
+        border-radius: 13px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; font-weight: 800; color: #07101a;
+        flex-shrink: 0;
+    }
+    .hero-title {
+        font-size: 1.6rem; font-weight: 700;
+        background: linear-gradient(135deg, #fff 0%, #a8c4e0 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        margin: 0; line-height: 1.2;
+    }
+    .hero-sub {
+        font-size: 0.9rem; color: var(--muted); margin: 0.2rem 0 0;
+    }
+
+    /* ── Buttons ── */
+    .stButton > button {
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%) !important;
+        color: #07101a !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+        font-size: 0.9rem !important;
+        padding: 0.55rem 1.4rem !important;
+        width: 100% !important;
+        letter-spacing: 0.01em !important;
+        transition: opacity .2s, transform .2s !important;
+        box-shadow: 0 4px 18px rgba(29,211,176,.2) !important;
+    }
+    .stButton > button:hover {
+        opacity: .88 !important;
+        transform: translateY(-1px) !important;
+    }
+    .stButton > button:active { transform: none !important; }
+
+    /* ── Download buttons ── */
+    .stDownloadButton > button {
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        color: var(--text) !important;
+        border-radius: 10px !important;
+        font-weight: 500 !important;
+        font-size: 0.9rem !important;
+        width: 100% !important;
+        transition: border-color .2s, color .2s !important;
+    }
+    .stDownloadButton > button:hover {
+        border-color: var(--accent) !important;
+        color: var(--accent) !important;
+    }
+
+    /* ── File uploader ── */
+    [data-testid="stFileUploader"] {
+        background: var(--surface) !important;
+        border: 1px dashed var(--border) !important;
+        border-radius: var(--radius) !important;
+        transition: border-color .2s !important;
+    }
+    [data-testid="stFileUploader"]:hover {
+        border-color: var(--accent) !important;
+    }
+
+    /* ── Selectbox ── */
+    [data-baseweb="select"] > div {
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 10px !important;
+        color: var(--text) !important;
+    }
+    [data-baseweb="select"] > div:hover { border-color: var(--accent) !important; }
+
+    /* ── Number input ── */
+    [data-testid="stNumberInput"] input {
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 10px !important;
+        color: var(--text) !important;
+    }
+    [data-testid="stNumberInput"] input:focus { border-color: var(--accent) !important; }
+
+    /* ── Expanders ── */
+    div[data-testid="stExpander"] {
+        background: var(--surface) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        margin-bottom: 0.75rem !important;
+        transition: border-color .25s, box-shadow .25s !important;
+        overflow: hidden !important;
+    }
+    div[data-testid="stExpander"]:hover {
+        border-color: rgba(29,211,176,.25) !important;
+        box-shadow: 0 4px 20px rgba(29,211,176,.06) !important;
+    }
+    div[data-testid="stExpander"] > details > summary {
+        padding: 1rem 1.2rem !important;
+        font-weight: 500 !important;
+        font-size: 0.95rem !important;
+        color: var(--text) !important;
+        background: transparent !important;
+    }
+    div[data-testid="stExpander"] > details > summary:hover { color: var(--accent) !important; }
+    div[data-testid="stExpander"] > details[open] > summary {
+        border-bottom: 1px solid var(--border) !important;
+    }
+
+    /* ── Alerts ── */
+    div[data-testid="stAlert"] {
+        border-radius: var(--radius) !important;
+        border: 1px solid rgba(29,211,176,.2) !important;
+        background: rgba(29,211,176,.05) !important;
+    }
+
+    /* ── Images in expander ── */
+    div[data-testid="stExpander"] [data-testid="stImage"] img {
+        border-radius: 10px !important;
+        border: 1px solid var(--border) !important;
+        background: #fff !important;
+        padding: 6px !important;
+    }
+
+    /* ── Formula description callout ── */
+    .formula-desc {
+        background: rgba(29,211,176,.05);
+        border-left: 3px solid var(--accent);
+        border-radius: 0 10px 10px 0;
+        padding: 0.65rem 0.9rem;
+        font-size: 0.88rem;
+        color: var(--muted);
+        line-height: 1.5;
+        margin-top: 0.5rem;
+    }
+
+    /* ── Code ── */
+    code {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.85rem !important;
+        background: rgba(0,0,0,.3) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 6px !important;
+        color: var(--accent2) !important;
+    }
+    pre code { background: transparent !important; border: none !important; }
+
+    /* ── Section label ── */
+    .section-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        margin: 1.5rem 0 0.6rem;
+        font-weight: 600;
+    }
+
+    /* ── Hint banner ── */
+    .hint {
+        background: var(--surface);
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+        padding: 0.9rem 1.2rem;
+        color: var(--muted);
+        font-size: 0.88rem;
+        text-align: center;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Session state ─────────────────────────────────────────────────────────────
+    for key, default in [
+        ('extraction_done', False), ('extracted_formulas', None),
+        ('extracted_crops', None),  ('output_dir', None),
+        ('detection_done',  False), ('results_boxes', None),
+        ('opencv_image',    None),  ('pdf_pages', None),
+        ('pdf_file_name',   None),  ('pdf_active_page', None),
+    ]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+
+    math_model = MD.initialize_model("./Models/MathDetector.ts")
+    mathargs, *mathobjs = RM.initialize()
+
+    # Hard-coded detection defaults (sliders removed for clean UI)
+    DET_CONF     = 0.40
+    DET_NMS      = 0.60
+    DET_DUP      = 0.45
+    DET_MIN_AREA = 0.00008
+    LATEX_API_FIRST  = False
+    LATEX_MAX_CALLS  = 8
+    DESC_MAX_CALLS   = 3
+
+    # ── Hero ──────────────────────────────────────────────────────────────────────
+    st.markdown("""
+        <div class="hero">
+            <div class="hero-icon">∑</div>
+            <div>
+                <div class="hero-title">Math Formula Detector</div>
+                <div class="hero-sub">Detect, extract &amp; render LaTeX from images or PDFs — powered by YOLOv5 + Transformer OCR.</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # ── Sidebar ───────────────────────────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown("**Input type**")
+        inf_style = st.selectbox("", ("Image", "PDF"), label_visibility="collapsed")
+
+        st.markdown("**Accuracy mode**")
+        extraction_mode = st.selectbox("", ("Fast", "Balanced", "High Accuracy"), index=1, label_visibility="collapsed")
+        if extraction_mode == "Fast":
+            LATEX_MAX_CALLS, DESC_MAX_CALLS, LATEX_API_FIRST = 4,  0,  False
+        elif extraction_mode == "Balanced":
+            LATEX_MAX_CALLS, DESC_MAX_CALLS, LATEX_API_FIRST = 8,  3,  False
+        else:
+            LATEX_MAX_CALLS, DESC_MAX_CALLS, LATEX_API_FIRST = 50, 10, True
+
+        st.markdown("---")
+
+        if inf_style == "Image":
+            uploaded_file = st.file_uploader("Upload image", type=["png", "jpeg", "jpg"])
+        else:
+            uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
+
+    # ─────────────────────────────── IMAGE FLOW ───────────────────────────────────
+    if inf_style == "Image":
+        if uploaded_file is None:
+            st.markdown('<div class="hint">Upload an image from the sidebar to get started.</div>', unsafe_allow_html=True)
+        else:
+            file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+            opencv_image = cv2.imdecode(file_bytes, 1)
+            st.session_state.opencv_image = opencv_image
+
+            col_img, col_ctrl = st.columns([3, 1], gap="large")
+            with col_img:
+                preview = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2RGB)
+                if st.session_state.detection_done and st.session_state.results_boxes is not None:
+                    annotated = st.session_state.opencv_image.copy()
+                    draw_rectangles(annotated, st.session_state.results_boxes)
+                    st.image(annotated, use_container_width=True)
+                else:
+                    st.image(preview, use_container_width=True)
+
+            with col_ctrl:
+                st.markdown('<div class="section-label">Detection</div>', unsafe_allow_html=True)
+                if st.button("Run Detection", key="img_detect"):
+                    with st.spinner("Detecting…"):
+                        boxes = MD.predict_formulas(
+                            opencv_image, math_model,
+                            conf_thres=DET_CONF, nms_iou_thres=DET_NMS,
+                            duplicate_iou_thres=DET_DUP, min_area_ratio=DET_MIN_AREA,
+                        )
+                        st.session_state.results_boxes = boxes
+                        st.session_state.detection_done = True
+                        st.session_state.extraction_done = False
+                        st.session_state.extracted_formulas = None
+                        st.rerun()
+
+                if st.session_state.detection_done and st.session_state.results_boxes is not None:
+                    n = len(st.session_state.results_boxes)
+                    if n > 0:
+                        st.success(f"{n} formula{'s' if n!=1 else ''} found")
+                        st.markdown('<div class="section-label">Export</div>', unsafe_allow_html=True)
+                        if st.button("Extract & Save", key="img_extract"):
+                            from datetime import datetime
+                            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            out = f"extracted_output_{ts}"
+                            os.makedirs(out, exist_ok=True)
+                            n_formulas = len(st.session_state.results_boxes)
+
+                            progress_bar = st.progress(0)
+                            status_box   = st.empty()
+
+                            def _step(pct, icon, msg):
+                                progress_bar.progress(pct)
+                                status_box.markdown(
+                                    f'<div style="padding:10px 14px;background:rgba(29,211,176,0.08);'
+                                    f'border-left:3px solid #1dd3b0;border-radius:8px;'
+                                    f'font-size:0.92rem;color:#e8f0f8;">'
+                                    f'{icon} &nbsp;<b>{msg}</b></div>',
+                                    unsafe_allow_html=True)
+
+                            _step(5,  '🔍', 'Cropping detected formula regions from image…')
+                            crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
+
+                            _step(15, '🧠', f'Loading transformer OCR model — recognising {n_formulas} formula{"s" if n_formulas!=1 else ""}…')
+                            formulas = FE.recognize_formulas(crops, mathargs, mathobjs)
+
+                            _step(45, '✨', 'Refining LaTeX with Gemini vision model…')
+                            try:
+                                formulas = FE.refine_formulas_latex_with_gemini(
+                                    formulas, crops,
+                                    max_calls=min(len(crops), LATEX_MAX_CALLS),
+                                    api_first=LATEX_API_FIRST, provider='gemini')
+                            except Exception:
+                                pass
+
+                            _step(65, '📝', 'Generating semantic descriptions for each formula…')
+                            formulas = FE.enrich_formulas_with_descriptions(formulas, max_api_calls=DESC_MAX_CALLS)
+
+                            _step(75, '🖼️', 'Saving annotated image and formula crops…')
+                            st.session_state.extracted_crops   = crops
+                            st.session_state.extracted_formulas = formulas
+                            FE.save_pdf_report(formulas, extracted_crops=crops,
+                                output_path=os.path.join(out,'formulas_report.pdf'),
+                                original_image=st.session_state.opencv_image)
+                            FE.save_annotated_image(st.session_state.opencv_image, formulas,
+                                os.path.join(out,'annotated_image.png'))
+                            fd = os.path.join(out,'formula_images'); os.makedirs(fd, exist_ok=True)
+                            for i,c in enumerate(crops):
+                                cv2.imwrite(os.path.join(fd,f'formula_{i+1:04d}.png'), c['image'])
+
+                            _step(90, '📦', 'Packaging all files into ZIP archive…')
+                            zp = os.path.join(out,'extracted_formulas.zip')
+                            with zipfile.ZipFile(zp,'w') as zf:
+                                for r,_,fs in os.walk(out):
+                                    for f in fs:
+                                        if not f.endswith('.zip'):
+                                            zf.write(os.path.join(r,f), os.path.relpath(os.path.join(r,f),out))
+
+                            _step(100, '✅', f'Done! {n_formulas} formula{"s" if n_formulas!=1 else ""} extracted and saved to {out}')
+                            st.session_state.output_dir    = out
+                            st.session_state.extraction_done = True
+
+                        if st.button("View Formulas", key="img_view"):
+                            n_formulas = len(st.session_state.results_boxes)
+                            progress_bar2 = st.progress(0)
+                            status_box2   = st.empty()
+
+                            def _step2(pct, icon, msg):
+                                progress_bar2.progress(pct)
+                                status_box2.markdown(
+                                    f'<div style="padding:10px 14px;background:rgba(29,211,176,0.08);'
+                                    f'border-left:3px solid #1dd3b0;border-radius:8px;'
+                                    f'font-size:0.92rem;color:#e8f0f8;">'
+                                    f'{icon} &nbsp;<b>{msg}</b></div>',
+                                    unsafe_allow_html=True)
+
+                            _step2(5,  '🔍', 'Cropping detected formula regions from image…')
+                            crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
+
+                            _step2(20, '🧠', f'Running transformer OCR on {n_formulas} formula crop{"s" if n_formulas!=1 else ""}…')
+                            formulas = FE.recognize_formulas(crops, mathargs, mathobjs)
+
+                            _step2(55, '✨', 'Refining LaTeX expressions with Gemini vision model…')
+                            try:
+                                formulas = FE.refine_formulas_latex_with_gemini(
+                                    formulas, crops,
+                                    max_calls=min(len(crops), LATEX_MAX_CALLS),
+                                    api_first=LATEX_API_FIRST, provider='gemini')
+                            except Exception:
+                                pass
+
+                            _step2(80, '📝', 'Generating semantic descriptions…')
+                            formulas = FE.enrich_formulas_with_descriptions(formulas, max_api_calls=DESC_MAX_CALLS)
+
+                            _step2(100, '✅', f'Recognised {n_formulas} formula{"s" if n_formulas!=1 else ""} — rendering results…')
+                            st.session_state.extracted_crops    = crops
+                            st.session_state.extracted_formulas = formulas
+                            st.session_state.extraction_done    = 'view'
+                    else:
+                        st.warning("No formulas detected.")
+
+            # ── Download row ──────────────────────────────────────────────────────
+            if st.session_state.extraction_done is True and st.session_state.output_dir:
+                out = st.session_state.output_dir
+                st.markdown('<div class="section-label">Downloads</div>', unsafe_allow_html=True)
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    pf = os.path.join(out,'formulas_report.pdf')
+                    if os.path.exists(pf):
+                        with open(pf,'rb') as f: st.download_button("PDF report", f.read(), "formulas_report.pdf", "application/pdf")
+                with dc2:
+                    zf = os.path.join(out,'extracted_formulas.zip')
+                    if os.path.exists(zf):
+                        with open(zf,'rb') as f: st.download_button("ZIP package", f.read(), "extracted_formulas.zip", "application/zip")
+
+            # ── Formula cards ─────────────────────────────────────────────────────
+            if st.session_state.extraction_done in (True, 'view') and st.session_state.extracted_formulas:
+                formulas = st.session_state.extracted_formulas
+                st.markdown(f'<div class="section-label">{len(formulas)} Formulas</div>', unsafe_allow_html=True)
+                for formula in formulas:
+                    conf_pct = f"{formula['confidence']*100:.1f}%"
+                    with st.expander(f"Formula #{formula['id']} · {conf_pct} confidence", expanded=False):
+                        fc1, fc2 = st.columns([1, 1], gap="medium")
+                        with fc1:
+                            coords = formula['coordinates']
+                            crop_img = st.session_state.opencv_image[coords[1]:coords[3], coords[0]:coords[2]]
+                            st.image(crop_img, use_container_width=True)
+                            if formula.get('description'):
+                                st.markdown(f'<div class="formula-desc">{formula["description"]}</div>', unsafe_allow_html=True)
+                        with fc2:
+                            render_latex_block(formula['latex'])
+                            st.code(formula['latex'], language='latex')
+
+    # ─────────────────────────────── PDF FLOW ────────────────────────────────────
+    else:
+        if uploaded_file is None:
+            st.markdown('<div class="hint">Upload a PDF from the sidebar to get started.</div>', unsafe_allow_html=True)
+        else:
+            if st.session_state.pdf_file_name != uploaded_file.name:
+                pdf_bytes = uploaded_file.read()
+                st.session_state.pdf_pages = pdf2image.convert_from_bytes(pdf_bytes)
+                st.session_state.pdf_file_name = uploaded_file.name
+                for k in ('detection_done','extraction_done','results_boxes','extracted_formulas','extracted_crops','output_dir'):
+                    st.session_state[k] = False if k in ('detection_done','extraction_done') else None
+
+            if st.session_state.pdf_pages:
+                col_pg, col_ctrl = st.columns([3, 1], gap="large")
+                with col_ctrl:
+                    st.markdown('<div class="section-label">Page</div>', unsafe_allow_html=True)
+                    page_idx = st.number_input("", min_value=1, max_value=len(st.session_state.pdf_pages), value=1, step=1, label_visibility="collapsed")
+                    if st.session_state.pdf_active_page != page_idx:
+                        for k in ('detection_done','extraction_done','results_boxes','extracted_formulas','extracted_crops','output_dir'):
+                            st.session_state[k] = False if k in ('detection_done','extraction_done') else None
+                        st.session_state.pdf_active_page = page_idx
+
+                page_image = st.session_state.pdf_pages[int(page_idx)-1]
+                opencv_image = cv2.cvtColor(np.array(page_image), cv2.COLOR_RGB2BGR)
+                st.session_state.opencv_image = opencv_image
+
+                with col_pg:
+                    if st.session_state.detection_done and st.session_state.results_boxes is not None:
+                        ann = opencv_image.copy()
+                        draw_rectangles(ann, st.session_state.results_boxes)
+                        st.image(ann, caption=f"Page {page_idx}", use_container_width=True)
+                    else:
+                        st.image(page_image, caption=f"Page {page_idx}", use_container_width=True)
+
+                with col_ctrl:
+                    st.markdown('<div class="section-label">Detection</div>', unsafe_allow_html=True)
+                    if st.button("Run Detection", key="pdf_detect"):
+                        with st.spinner("Detecting…"):
+                            boxes = MD.predict_formulas(
+                                opencv_image, math_model,
+                                conf_thres=DET_CONF, nms_iou_thres=DET_NMS,
+                                duplicate_iou_thres=DET_DUP, min_area_ratio=DET_MIN_AREA,
+                            )
+                            st.session_state.results_boxes = boxes
+                            st.session_state.detection_done = True
+                            st.session_state.extraction_done = False
+                            st.session_state.extracted_formulas = None
+                            st.rerun()
+
+                    if st.session_state.detection_done and st.session_state.results_boxes is not None:
+                        n = len(st.session_state.results_boxes)
+                        if n > 0:
+                            st.success(f"{n} formula{'s' if n!=1 else ''} found")
+                            st.markdown('<div class="section-label">Export</div>', unsafe_allow_html=True)
+                            if st.button("Extract & Save", key="pdf_extract"):
+                                from datetime import datetime
+                                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                out = f"extracted_output_pdf_p{page_idx}_{ts}"
+                                os.makedirs(out, exist_ok=True)
+                                n_formulas = len(st.session_state.results_boxes)
+
+                                pb = st.progress(0)
+                                sb = st.empty()
+                                def _pstep(pct, icon, msg):
+                                    pb.progress(pct)
+                                    sb.markdown(
+                                        f'<div style="padding:10px 14px;background:rgba(29,211,176,0.08);'
+                                        f'border-left:3px solid #1dd3b0;border-radius:8px;'
+                                        f'font-size:0.92rem;color:#e8f0f8;">'
+                                        f'{icon} &nbsp;<b>{msg}</b></div>',
+                                        unsafe_allow_html=True)
+
+                                _pstep(5,  '🔍', f'Cropping {n_formulas} formula region{"s" if n_formulas!=1 else ""} from PDF page…')
+                                crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
+
+                                _pstep(18, '🧠', f'Running transformer OCR on {n_formulas} crop{"s" if n_formulas!=1 else ""}…')
+                                formulas = FE.recognize_formulas(crops, mathargs, mathobjs)
+
+                                _pstep(45, '✨', 'Refining LaTeX with Gemini vision model…')
+                                try:
+                                    formulas = FE.refine_formulas_latex_with_gemini(
+                                        formulas, crops,
+                                        max_calls=min(len(crops), LATEX_MAX_CALLS),
+                                        api_first=LATEX_API_FIRST, provider='auto')
+                                except Exception:
+                                    pass
+
+                                _pstep(65, '📝', 'Generating semantic descriptions…')
+                                formulas = FE.enrich_formulas_with_descriptions(formulas, max_api_calls=DESC_MAX_CALLS)
+
+                                _pstep(75, '🖼️', 'Saving annotated image and formula crops…')
+                                st.session_state.extracted_crops   = crops
+                                st.session_state.extracted_formulas = formulas
+                                FE.save_pdf_report(formulas, extracted_crops=crops,
+                                    output_path=os.path.join(out,'formulas_report.pdf'),
+                                    original_image=st.session_state.opencv_image)
+                                FE.save_annotated_image(st.session_state.opencv_image, formulas,
+                                    os.path.join(out,'annotated_image.png'))
+                                fd = os.path.join(out,'formula_images'); os.makedirs(fd, exist_ok=True)
+                                for i,c in enumerate(crops):
+                                    cv2.imwrite(os.path.join(fd,f'formula_{i+1:04d}.png'), c['image'])
+
+                                _pstep(90, '📦', 'Packaging into ZIP archive…')
+                                zp = os.path.join(out,'extracted_formulas.zip')
+                                with zipfile.ZipFile(zp,'w') as zf:
+                                    for r,_,fs in os.walk(out):
+                                        for f in fs:
+                                            if not f.endswith('.zip'):
+                                                zf.write(os.path.join(r,f), os.path.relpath(os.path.join(r,f),out))
+
+                                _pstep(100, '✅', f'Done! {n_formulas} formula{"s" if n_formulas!=1 else ""} saved to {out}')
+                                st.session_state.output_dir      = out
+                                st.session_state.extraction_done = True
+
+                            if st.button("View Formulas", key="pdf_view"):
+                                n_formulas = len(st.session_state.results_boxes)
+                                pb2 = st.progress(0)
+                                sb2 = st.empty()
+                                def _pstep2(pct, icon, msg):
+                                    pb2.progress(pct)
+                                    sb2.markdown(
+                                        f'<div style="padding:10px 14px;background:rgba(29,211,176,0.08);'
+                                        f'border-left:3px solid #1dd3b0;border-radius:8px;'
+                                        f'font-size:0.92rem;color:#e8f0f8;">'
+                                        f'{icon} &nbsp;<b>{msg}</b></div>',
+                                        unsafe_allow_html=True)
+
+                                _pstep2(5,  '🔍', f'Cropping {n_formulas} formula region{"s" if n_formulas!=1 else ""} from PDF page…')
+                                crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
+
+                                _pstep2(20, '🧠', f'Running transformer OCR on {n_formulas} crop{"s" if n_formulas!=1 else ""}…')
+                                formulas = FE.recognize_formulas(crops, mathargs, mathobjs)
+
+                                _pstep2(55, '✨', 'Refining LaTeX with Gemini vision model…')
+                                try:
+                                    formulas = FE.refine_formulas_latex_with_gemini(
+                                        formulas, crops,
+                                        max_calls=min(len(crops), LATEX_MAX_CALLS),
+                                        api_first=LATEX_API_FIRST, provider='auto')
+                                except Exception:
+                                    pass
+
+                                _pstep2(80, '📝', 'Generating semantic descriptions…')
+                                formulas = FE.enrich_formulas_with_descriptions(formulas, max_api_calls=DESC_MAX_CALLS)
+
+                                _pstep2(100, '✅', f'Recognised {n_formulas} formula{"s" if n_formulas!=1 else ""} — rendering results…')
+                                st.session_state.extracted_crops    = crops
+                                st.session_state.extracted_formulas = formulas
+                                st.session_state.extraction_done    = 'view'
+                        else:
+                            st.warning("No formulas detected.")
+
+                # ── Download row ──────────────────────────────────────────────────
+                if st.session_state.extraction_done is True and st.session_state.output_dir:
+                    out = st.session_state.output_dir
+                    st.markdown('<div class="section-label">Downloads</div>', unsafe_allow_html=True)
+                    dc1, dc2 = st.columns(2)
+                    with dc1:
+                        pf = os.path.join(out,'formulas_report.pdf')
+                        if os.path.exists(pf):
+                            with open(pf,'rb') as f: st.download_button("PDF report", f.read(), "formulas_report.pdf", "application/pdf")
+                    with dc2:
+                        zf = os.path.join(out,'extracted_formulas.zip')
+                        if os.path.exists(zf):
+                            with open(zf,'rb') as f: st.download_button("ZIP package", f.read(), "extracted_formulas.zip", "application/zip")
+
+                # ── Formula cards ──────────────────────────────────────────────────
+                if st.session_state.extraction_done in (True, 'view') and st.session_state.extracted_formulas:
+                    formulas = st.session_state.extracted_formulas
+                    st.markdown(f'<div class="section-label">{len(formulas)} Formulas</div>', unsafe_allow_html=True)
+                    for formula in formulas:
+                        conf_pct = f"{formula['confidence']*100:.1f}%"
+                        with st.expander(f"Formula #{formula['id']} · {conf_pct} confidence", expanded=False):
+                            fc1, fc2 = st.columns([1, 1], gap="medium")
+                            with fc1:
+                                coords = formula['coordinates']
+                                crop_img = st.session_state.opencv_image[coords[1]:coords[3], coords[0]:coords[2]]
+                                st.image(crop_img, use_container_width=True)
+                                if formula.get('description'):
+                                    st.markdown(f'<div class="formula-desc">{formula["description"]}</div>', unsafe_allow_html=True)
+                            with fc2:
+                                render_latex_block(formula['latex'])
+                                st.code(formula['latex'], language='latex')
+
+
+            st.markdown("""
+            <style>
+            --bg-1: #0b1220;
+            --panel: rgba(13, 22, 38, 0.75);
+            --panel-hover: rgba(18, 30, 51, 0.85);
+            --panel-border: rgba(67, 178, 255, 0.18);
+            --panel-border-hover: rgba(29, 211, 176, 0.4);
+            --text-main: #f0f5ff;
+            --text-muted: #a0b2c6;
             --mint: #1dd3b0;
-            --amber: #ffb255;
-            --cyan: #43b2ff;
+            --mint-glow: rgba(29, 211, 176, 0.25);
+            --cyan: #00f2fe;
+            --cyan-glow: rgba(0, 242, 254, 0.25);
+            --gold: #ffb255;
+            --purple: #7f5af0;
         }
 
-        html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; color: var(--text); }
+        html, body, [class*="css"] { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+            color: var(--text-main); 
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Space Grotesk', sans-serif !important;
+            font-weight: 600 !important;
+            letter-spacing: -0.02em !important;
+            color: var(--text-main) !important;
+        }
+
         .main {
-            background:
-                radial-gradient(circle at 14% 4%, rgba(67, 178, 255, 0.18), transparent 34%),
-                radial-gradient(circle at 90% -8%, rgba(255, 178, 85, 0.16), transparent 35%),
-                radial-gradient(circle at 50% 120%, rgba(29, 211, 176, 0.14), transparent 45%),
-                linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+            background: 
+                radial-gradient(circle at 10% 20%, rgba(67, 178, 255, 0.12), transparent 40%),
+                radial-gradient(circle at 90% 10%, rgba(127, 90, 240, 0.1), transparent 40%),
+                radial-gradient(circle at 50% 80%, rgba(29, 211, 176, 0.08), transparent 50%),
+                linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%) !important;
         }
 
-        .block-container { padding-top: 1.2rem; padding-bottom: 2rem; max-width: none; padding-left: 2rem; padding-right: 2rem; }
-        .stSidebar { background: linear-gradient(180deg, #0a111b 0%, #0f1622 100%); border-right: 1px solid rgba(67, 178, 255, 0.2); }
+        .block-container { 
+            padding-top: 1.5rem; 
+            padding-bottom: 3rem; 
+            max-width: none; 
+            padding-left: 3rem; 
+            padding-right: 3rem; 
+        }
+
+        [data-testid="stSidebar"] { 
+            background: linear-gradient(180deg, #050b14 0%, #08111e 100%) !important; 
+            border-right: 1px solid var(--panel-border) !important; 
+        }
 
         .hero {
-            border: 1px solid var(--line);
-            border-radius: 20px;
-            padding: 1rem 1.15rem 1.1rem 1.15rem;
-            background:
-                linear-gradient(135deg, rgba(67, 178, 255, 0.10), transparent 35%),
-                linear-gradient(320deg, rgba(255, 178, 85, 0.10), transparent 30%),
-                var(--panel);
-            box-shadow: 0 20px 40px rgba(3, 8, 16, 0.45);
-            backdrop-filter: blur(8px);
+            border: 1px solid var(--panel-border) !important;
+            border-radius: 20px !important;
+            padding: 1.5rem !important;
+            background: linear-gradient(135deg, rgba(67, 178, 255, 0.08), rgba(127, 90, 240, 0.08)) !important;
+            background-color: var(--panel) !important;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease !important;
+            margin-bottom: 1.5rem !important;
+        }
+        
+        .hero:hover {
+            border-color: rgba(67, 178, 255, 0.3) !important;
+            box-shadow: 0 20px 40px rgba(67, 178, 255, 0.08) !important;
         }
 
-        .hero-title { font-size: 1.95rem; font-weight: 700; line-height: 1.15; margin-bottom: 0.25rem; }
-        .hero-subtitle { color: var(--text-soft); font-size: 0.98rem; margin-bottom: 0.7rem; }
+        .hero-title { 
+            font-size: 2.2rem !important; 
+            font-weight: 700 !important; 
+            line-height: 1.2; 
+            background: linear-gradient(135deg, #ffffff 30%, var(--text-muted) 100%) !important;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            margin-bottom: 0.4rem !important; 
+        }
+        
+        .hero-subtitle { 
+            color: var(--text-muted); 
+            font-size: 1.05rem; 
+            margin-bottom: 1rem; 
+        }
 
-        .chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .chip-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
         .chip {
-            border: 1px solid var(--line);
-            background: rgba(11, 18, 28, 0.74);
-            color: #cfe4ff;
-            border-radius: 999px;
-            padding: 0.27rem 0.68rem;
-            font-size: 0.78rem;
-            letter-spacing: 0.03em;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(255, 255, 255, 0.04) !important;
+            color: var(--text-muted) !important;
+            border-radius: 999px !important;
+            padding: 0.3rem 0.8rem !important;
+            font-size: 0.8rem !important;
+            font-weight: 500 !important;
+            letter-spacing: 0.02em !important;
+            transition: all 0.25s ease !important;
+        }
+        .chip:hover {
+            border-color: var(--mint) !important;
+            color: var(--mint) !important;
+            background: rgba(29, 211, 176, 0.05) !important;
         }
 
         .stButton > button {
-            border-radius: 12px;
-            border: 1px solid rgba(25, 198, 169, 0.65);
-            color: #04151c;
-            background: linear-gradient(135deg, var(--mint) 0%, var(--cyan) 100%);
-            box-shadow: 0 10px 22px rgba(67, 178, 255, 0.23);
-            font-weight: 700;
-            transition: transform .15s ease, box-shadow .15s ease;
+            border-radius: 12px !important;
+            border: 1px solid rgba(29, 211, 176, 0.4) !important;
+            color: #050b14 !important;
+            background: linear-gradient(135deg, var(--mint) 0%, var(--cyan) 100%) !important;
+            box-shadow: 0 8px 20px rgba(0, 242, 254, 0.15) !important;
+            font-family: 'Space Grotesk', sans-serif !important;
+            font-weight: 600 !important;
+            font-size: 0.95rem !important;
+            letter-spacing: 0.02em !important;
+            padding: 0.6rem 1.5rem !important;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            width: 100% !important;
         }
         .stButton > button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 14px 26px rgba(29, 211, 176, 0.30);
+            transform: translateY(-2px) !important;
+            box-shadow: 0 12px 25px rgba(29, 211, 176, 0.35) !important;
+            border-color: var(--mint) !important;
+            color: #050b14 !important;
+        }
+        .stButton > button:active {
+            transform: translateY(0px) !important;
         }
 
         .stDownloadButton > button {
-            border-radius: 12px;
-            background: var(--panel-2);
-            border: 1px solid rgba(113, 146, 181, 0.32);
-            color: var(--text);
+            border-radius: 12px !important;
+            background: rgba(13, 22, 38, 0.6) !important;
+            border: 1px solid var(--panel-border) !important;
+            color: var(--text-main) !important;
+            font-family: 'Space Grotesk', sans-serif !important;
+            font-weight: 600 !important;
+            padding: 0.6rem 1.5rem !important;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            width: 100% !important;
         }
-        .stDownloadButton > button:hover { border-color: var(--mint); color: var(--mint); }
+        .stDownloadButton > button:hover { 
+            border-color: var(--mint) !important; 
+            color: var(--mint) !important; 
+            background: rgba(29, 211, 176, 0.05) !important;
+            box-shadow: 0 0 15px var(--mint-glow) !important;
+            transform: translateY(-2px) !important;
+        }
+        .stDownloadButton > button:active {
+            transform: translateY(0px) !important;
+        }
 
-        .stExpander {
-            border-radius: 14px;
-            border: 1px solid var(--line);
-            background: rgba(14, 22, 34, 0.86);
+        /* Streamlit Accordion Cards */
+        div[data-testid="stExpander"] {
+            border-radius: 16px !important;
+            border: 1px solid var(--panel-border) !important;
+            background-color: var(--panel) !important;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15) !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            margin-bottom: 1rem !important;
+            overflow: hidden !important;
         }
-        .stAlert { border-radius: 12px; border: 1px solid rgba(29, 211, 176, 0.5); }
+        div[data-testid="stExpander"]:hover {
+            border-color: var(--panel-border-hover) !important;
+            box-shadow: 0 8px 25px rgba(29, 211, 176, 0.08) !important;
+            transform: translateY(-2px) !important;
+        }
+        div[data-testid="stExpander"] > details > summary {
+            background-color: transparent !important;
+            padding: 1rem 1.2rem !important;
+            font-family: 'Space Grotesk', sans-serif !important;
+            font-weight: 600 !important;
+            font-size: 1.05rem !important;
+            color: var(--text-main) !important;
+            transition: background-color 0.2s ease, color 0.2s ease !important;
+        }
+        div[data-testid="stExpander"] > details > summary:hover {
+            background-color: rgba(255, 255, 255, 0.03) !important;
+            color: var(--mint) !important;
+        }
+        div[data-testid="stExpander"] > details[open] > summary {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        }
+        div[data-testid="stExpander"] > details > summary > span {
+            font-family: 'Space Grotesk', sans-serif !important;
+            font-weight: 600 !important;
+        }
+
+        /* Alerts Styling */
+        div[data-testid="stAlert"] { 
+            border-radius: 14px !important; 
+            border: 1px solid rgba(29, 211, 176, 0.2) !important; 
+            background-color: rgba(13, 22, 38, 0.6) !important;
+            color: var(--text-main) !important;
+        }
+
+        /* File Uploader Dropzone Styling */
+        [data-testid="stFileUploader"] {
+            background: rgba(13, 22, 38, 0.4) !important;
+            border: 2px dashed var(--panel-border) !important;
+            border-radius: 16px !important;
+            padding: 1.5rem !important;
+            transition: all 0.3s ease !important;
+        }
+        [data-testid="stFileUploader"]:hover {
+            border-color: var(--mint) !important;
+            background: rgba(13, 22, 38, 0.6) !important;
+            box-shadow: 0 0 15px var(--mint-glow) !important;
+        }
+
+        /* Slider overrides */
+        .stSlider [data-testid="stThumbValue"] {
+            color: var(--mint) !important;
+            font-weight: 600 !important;
+        }
+        .stSlider [data-baseweb="slider"] > div {
+            background-color: rgba(29, 211, 176, 0.2) !important;
+        }
+        .stSlider [data-baseweb="slider"] [role="slider"] {
+            background-color: var(--mint) !important;
+            box-shadow: 0 0 10px var(--mint-glow) !important;
+        }
+
+        /* Selectbox overrides */
+        [data-baseweb="select"] > div {
+            background-color: rgba(13, 22, 38, 0.6) !important;
+            border: 1px solid var(--panel-border) !important;
+            color: var(--text-main) !important;
+            border-radius: 10px !important;
+            transition: all 0.2s ease !important;
+        }
+        [data-baseweb="select"] > div:hover {
+            border-color: var(--mint) !important;
+        }
+
+        /* Number Input overrides */
+        [data-testid="stNumberInput"] input {
+            background-color: rgba(13, 22, 38, 0.6) !important;
+            border: 1px solid var(--panel-border) !important;
+            color: var(--text-main) !important;
+            border-radius: 10px !important;
+            transition: all 0.2s ease !important;
+        }
+        [data-testid="stNumberInput"] input:hover {
+            border-color: var(--mint) !important;
+        }
 
         .empty-state {
-            margin-top: 0.9rem;
-            border: 1px dashed rgba(113, 146, 181, 0.34);
-            background: rgba(9, 15, 24, 0.6);
-            border-radius: 16px;
-            padding: 0.9rem 1rem;
-            color: var(--text-soft);
+            margin-top: 1rem !important;
+            border: 1px dashed var(--panel-border) !important;
+            background: rgba(13, 22, 38, 0.3) !important;
+            border-radius: 16px !important;
+            padding: 1.2rem 1.5rem !important;
+            color: var(--text-muted) !important;
+            font-size: 0.95rem !important;
+            text-align: center !important;
         }
 
         code {
-            font-family: 'IBM Plex Mono', monospace !important;
-            letter-spacing: .02em;
+            font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace !important;
+            background-color: rgba(5, 11, 20, 0.8) !important;
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            border-radius: 8px !important;
+            padding: 0.15rem 0.4rem !important;
+            color: var(--cyan) !important;
+            font-size: 0.9rem !important;
+        }
+        
+        pre code {
+            background-color: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+        }
+
+        /* Formula Crop Image Styling */
+        div[data-testid="stExpander"] img {
+            border: 1px solid var(--panel-border) !important;
+            border-radius: 8px !important;
+            padding: 8px !important;
+            background-color: #ffffff !important;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05) !important;
+            transition: all 0.25s ease !important;
+        }
+        div[data-testid="stExpander"] img:hover {
+            border-color: var(--mint) !important;
+            transform: scale(1.01) !important;
+        }
+
+        /* Description Styling */
+        .formula-desc {
+            background-color: rgba(29, 211, 176, 0.05) !important;
+            border-left: 3px solid var(--mint) !important;
+            padding: 0.8rem 1rem !important;
+            border-radius: 0 10px 10px 0 !important;
+            font-size: 0.9rem !important;
+            color: var(--text-main) !important;
+            margin-top: 0.5rem !important;
+            line-height: 1.4 !important;
         }
         </style>
         """,
@@ -236,404 +1080,4 @@ if __name__ == '__main__':
         """,
         unsafe_allow_html=True,
     )
-
-    inf_style = st.sidebar.selectbox("Inference Type",('Image', 'PDF'))
-    if inf_style == 'Image':
-
-        uploaded_file = st.sidebar.file_uploader("Upload Image", type=['png','jpeg', 'jpg'])
-
-    #     res = st.sidebar.radio("Final Result",("Detection","Detection And Recogntion"))
-        if uploaded_file is not None:
-            if st.sidebar.button('Clear uploaded file or image!'):
-                st.warning("attempt to clear uploaded_file")
-                uploaded_file.seek(0)
-            with st.spinner(text='In progress'):
-                # Read once and render from decoded array to avoid stale file refs
-                file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-                opencv_image = cv2.imdecode(file_bytes, 1)
-                preview_image = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2RGB)
-                st.sidebar.image(preview_image)
-                
-                # Store image in session for later use
-                st.session_state.opencv_image = opencv_image
-
-                if st.button('Launch the Detection!'):
-                    results_boxes = MD.predict_formulas(opencv_image, math_model)
-                    st.session_state.results_boxes = results_boxes
-                    st.session_state.detection_done = True
-                
-                # Show detection result if detection was done
-                if st.session_state.detection_done and st.session_state.results_boxes is not None:
-                    results_boxes = st.session_state.results_boxes
-                    images_rectangles = st.session_state.opencv_image.copy()
-                    draw_rectangles(images_rectangles, results_boxes)
-                    st.image(images_rectangles)
-                    
-                    # Add extraction option
-                    if len(results_boxes) > 0:
-                        st.success(f"✓ Found {len(results_boxes)} formulas!")
-                        
-                        # Create two columns for better layout
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            if st.button("🚀 Extract Formulas to File"):
-                                with st.spinner("Extracting and recognizing formulas..."):
-                                    # Create output directory with timestamp
-                                    from datetime import datetime
-                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                    output_dir = f"extracted_output_{timestamp}"
-                                    os.makedirs(output_dir, exist_ok=True)
-                                    
-                                    # Extract formula crops
-                                    st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
-                                    
-                                    # Recognize formulas
-                                    st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
-                                    # Optionally refine LaTeX using Gemini for weak outputs
-                                    try:
-                                        st.session_state.extracted_formulas = FE.refine_formulas_latex_with_gemini(
-                                            st.session_state.extracted_formulas,
-                                            st.session_state.extracted_crops,
-                                            max_calls=8
-                                        )
-                                    except Exception:
-                                        pass
-                                    # Enrich with AI descriptions if available
-                                    st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
-                                    
-                                    # Save all files to output directory
-                                    formulas = st.session_state.extracted_formulas
-                                    extracted_crops = st.session_state.extracted_crops
-                                    
-                                    # Save consolidated PDF Report
-                                    pdf_path = os.path.join(output_dir, 'formulas_report.pdf')
-                                    FE.save_pdf_report(formulas, extracted_crops=extracted_crops, output_path=pdf_path, original_image=st.session_state.opencv_image)
-                                    
-                                    # Save Annotated Image
-                                    annotated_path = os.path.join(output_dir, 'annotated_image.png')
-                                    FE.save_annotated_image(st.session_state.opencv_image, formulas, annotated_path)
-                                    
-                                    # Save individual formula images
-                                    formula_dir = os.path.join(output_dir, 'formula_images')
-                                    os.makedirs(formula_dir, exist_ok=True)
-                                    for idx, crop_data in enumerate(extracted_crops):
-                                        img_path = os.path.join(formula_dir, f'formula_{idx+1:04d}.png')
-                                        cv2.imwrite(img_path, crop_data['image'])
-                                    
-                                    # Create ZIP package
-                                    zip_path = os.path.join(output_dir, 'extracted_formulas.zip')
-                                    with zipfile.ZipFile(zip_path, 'w') as zip_file:
-                                        for root, dirs, files in os.walk(output_dir):
-                                            for file in files:
-                                                if not file.endswith('.zip'):
-                                                    file_path = os.path.join(root, file)
-                                                    arcname = os.path.relpath(file_path, output_dir)
-                                                    zip_file.write(file_path, arcname)
-                                    
-                                    st.session_state.extraction_done = True
-                                    st.session_state.output_dir = output_dir
-                                    
-                                    st.success(f"✓ Successfully extracted {len(formulas)} formulas!")
-                                    st.info(f"📁 All files saved to: **{output_dir}**")
-                        
-                        with col2:
-                            if st.button("👁️ View Extracted Formulas"):
-                                with st.spinner("Extracting and recognizing formulas..."):
-                                    # Extract formula crops
-                                    st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
-                                    
-                                    # Recognize formulas
-                                    st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
-                                    # Optionally refine LaTeX using Gemini for weak outputs
-                                    try:
-                                        st.session_state.extracted_formulas = FE.refine_formulas_latex_with_gemini(
-                                            st.session_state.extracted_formulas,
-                                            st.session_state.extracted_crops,
-                                            max_calls=8
-                                        )
-                                    except Exception:
-                                        pass
-                                    # Optional: enrich with AI descriptions
-                                    st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
-                                    st.session_state.extraction_done = 'view'
-                        
-                        # Display extraction results if extraction was done
-                        if st.session_state.extraction_done == True:
-                            if st.session_state.extracted_formulas is not None and st.session_state.output_dir is not None:
-                                formulas = st.session_state.extracted_formulas
-                                output_dir = st.session_state.output_dir
-                                
-                                st.success(f"✓ Successfully extracted {len(formulas)} formulas!")
-                                st.info(f"📁 All files saved to: **{output_dir}**")
-                                
-                                # Export options in columns
-                                st.subheader("📥 Download Extracted Formulas")
-                                
-                                dl_col1, dl_col2 = st.columns(2)
-                                
-                                # PDF Report Download
-                                with dl_col1:
-                                    pdf_file = os.path.join(output_dir, 'formulas_report.pdf')
-                                    if os.path.exists(pdf_file):
-                                        with open(pdf_file, 'rb') as f:
-                                            st.download_button(
-                                                label="📄 PDF",
-                                                data=f.read(),
-                                                file_name="formulas_report.pdf",
-                                                mime="application/pdf"
-                                            )
-                                
-                                # ZIP Download
-                                with dl_col2:
-                                    zip_file = os.path.join(output_dir, 'extracted_formulas.zip')
-                                    if os.path.exists(zip_file):
-                                        with open(zip_file, 'rb') as f:
-                                            st.download_button(
-                                                label="📦 ZIP",
-                                                data=f.read(),
-                                                file_name="extracted_formulas.zip",
-                                                mime="application/zip"
-                                            )
-                                
-                                st.success("✓ All files are ready for download!")
-                        
-                        # Display view results if view was requested
-                        if st.session_state.extraction_done == 'view':
-                            if st.session_state.extracted_formulas is not None:
-                                formulas = st.session_state.extracted_formulas
-                                
-                                st.subheader("🔍 Extracted Formulas Details")
-                                
-                                for formula in formulas:
-                                    with st.expander(f"📐 Formula #{formula['id']} (Confidence: {formula['confidence']:.4f})", expanded=False):
-                                        exp_col1, exp_col2 = st.columns(2)
-                                        
-                                        with exp_col1:
-                                            st.write("**Formula Image:**")
-                                            coords = formula['coordinates']
-                                            crop_img = st.session_state.opencv_image[coords[1]:coords[3], coords[0]:coords[2]]
-                                            st.image(crop_img, use_column_width=True)
-                                            # Show AI description directly under the image if available
-                                            if 'description' in formula and formula['description']:
-                                                st.write("**About this formula:**")
-                                                st.write(formula['description'])
-                                        
-                                        with exp_col2:
-                                            st.write("**LaTeX Formula:**")
-                                            st.code(formula['latex'], language='latex')
-                                            st.write("**Rendered:**")
-                                            render_latex_block(formula['latex'])
-                                            st.write(f"**Bounding Box:** {formula['coordinates']}")
-                    else:
-                        st.warning("No formulas detected in the image.")
-
-
-
-    #                 col1, col2, col3 = st.columns(3)
-    #                 col1.header("Image")
-    #                 col2.header("Latext")
-    #                 col3.header("Formula")
-    #                 if res == "Detection And Recogntion":
-    #                     for each_box in results_boxes:
-    #                         each_box = list(map(int,each_box))
-    #                         crop_box = opencv_image[each_box[1]:each_box[3],each_box[0]:each_box[2],:]
-    #                         crop_img = Image.fromarray(np.uint8(crop_box))
-    #                         pred = RM.call_model(mathargs, *mathobjs, img=crop_img)
-    #                         col1, col2, col3 = st.columns(3)
-    #                         with col1:
-    #                             st.image(crop_box)
-    #                         with col2:
-    #                             st.write(pred, width=5)
-    #                         with col3:
-    #                             st.markdown("$$"+pred+"$$")
-    elif inf_style == 'PDF':
-        imagem_referencia = st.sidebar.file_uploader("Choose an image", type=["pdf"])
-        if st.sidebar.button('Clear uploaded file or image!'):
-            st.write("attempt to clear uploaded_file")
-            imagem_referencia.seek(0)
-    #     res = st.sidebar.radio("Final Result",("Detection","Detection And Recogntion"))
-
-        if imagem_referencia is not None:
-            if imagem_referencia.type == "application/pdf":
-                # Cache PDF pages to avoid repeated conversions
-                if st.session_state.pdf_file_name != imagem_referencia.name:
-                    pdf_bytes = imagem_referencia.read()
-                    st.session_state.pdf_pages = pdf2image.convert_from_bytes(pdf_bytes)
-                    st.session_state.pdf_file_name = imagem_referencia.name
-                    # Reset state for new PDF
-                    st.session_state.detection_done = False
-                    st.session_state.extraction_done = False
-                    st.session_state.results_boxes = None
-                    st.session_state.extracted_formulas = None
-                    st.session_state.extracted_crops = None
-                    st.session_state.output_dir = None
-
-                if st.session_state.pdf_pages:
-                    page_idx = st.sidebar.number_input("Page Number", min_value=1, max_value=len(st.session_state.pdf_pages), value=1, step=1)
-                    page_image = st.session_state.pdf_pages[int(page_idx) - 1]
-                    # Convert PIL RGB page to OpenCV BGR for detector/recognizer
-                    opencv_image = cv2.cvtColor(np.array(page_image), cv2.COLOR_RGB2BGR)
-                    st.session_state.opencv_image = opencv_image
-                    st.sidebar.image(page_image, caption=f"PDF Page {page_idx}")
-
-                    # Reset detection/extraction state when page changes
-                    if st.session_state.pdf_active_page != page_idx:
-                        st.session_state.detection_done = False
-                        st.session_state.extraction_done = False
-                        st.session_state.results_boxes = None
-                        st.session_state.extracted_formulas = None
-                        st.session_state.extracted_crops = None
-                        st.session_state.output_dir = None
-                        st.session_state.pdf_active_page = page_idx
-
-                    if st.button('Launch the Detection!', key='pdf_detect'):
-                        results_boxes = MD.predict_formulas(opencv_image, math_model)
-                        st.session_state.results_boxes = results_boxes
-                        st.session_state.detection_done = True
-
-                    if st.session_state.detection_done and st.session_state.results_boxes is not None:
-                        results_boxes = st.session_state.results_boxes
-                        images_rectangles = opencv_image.copy()
-                        draw_rectangles(images_rectangles, results_boxes)
-                        st.image(images_rectangles, caption=f"Detections on Page {page_idx}")
-
-                        if len(results_boxes) > 0:
-                            st.success(f"✓ Found {len(results_boxes)} formulas on page {page_idx}!")
-
-                            col1, col2 = st.columns(2)
-
-                            with col1:
-                                if st.button("🚀 Extract Formulas to File (PDF)", key='pdf_extract_files'):
-                                    with st.spinner("Extracting and recognizing formulas from PDF page..."):
-                                        from datetime import datetime
-                                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                        output_dir = f"extracted_output_pdf_p{page_idx}_{timestamp}"
-                                        os.makedirs(output_dir, exist_ok=True)
-
-                                        st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
-                                        st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
-                                        # Optionally refine LaTeX using Gemini for weak outputs
-                                        try:
-                                            st.session_state.extracted_formulas = FE.refine_formulas_latex_with_gemini(
-                                                st.session_state.extracted_formulas,
-                                                st.session_state.extracted_crops,
-                                                max_calls=8
-                                            )
-                                        except Exception:
-                                            pass
-                                        # Enrich with AI descriptions if available
-                                        st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
-
-                                        formulas = st.session_state.extracted_formulas
-                                        extracted_crops = st.session_state.extracted_crops
-
-                                        pdf_path = os.path.join(output_dir, 'formulas_report.pdf')
-                                        FE.save_pdf_report(formulas, extracted_crops=extracted_crops, output_path=pdf_path, original_image=st.session_state.opencv_image)
-
-                                        annotated_path = os.path.join(output_dir, 'annotated_image.png')
-                                        FE.save_annotated_image(st.session_state.opencv_image, formulas, annotated_path)
-
-                                        formula_dir = os.path.join(output_dir, 'formula_images')
-                                        os.makedirs(formula_dir, exist_ok=True)
-                                        for idx, crop_data in enumerate(extracted_crops):
-                                            img_path = os.path.join(formula_dir, f'formula_{idx+1:04d}.png')
-                                            cv2.imwrite(img_path, crop_data['image'])
-
-                                        zip_path = os.path.join(output_dir, 'extracted_formulas.zip')
-                                        with zipfile.ZipFile(zip_path, 'w') as zip_file:
-                                            for root, dirs, files in os.walk(output_dir):
-                                                for file in files:
-                                                    if not file.endswith('.zip'):
-                                                        file_path = os.path.join(root, file)
-                                                        arcname = os.path.relpath(file_path, output_dir)
-                                                        zip_file.write(file_path, arcname)
-
-                                        st.session_state.extraction_done = True
-                                        st.session_state.output_dir = output_dir
-
-                                        st.success(f"✓ Successfully extracted {len(formulas)} formulas!")
-                                        st.info(f"📁 All files saved to: **{output_dir}**")
-
-                            with col2:
-                                if st.button("👁️ View Extracted Formulas (PDF)", key='pdf_view_extract'):
-                                    with st.spinner("Extracting and recognizing formulas from PDF page..."):
-                                        st.session_state.extracted_crops = FE.extract_formula_crops(st.session_state.opencv_image, st.session_state.results_boxes)
-                                        st.session_state.extracted_formulas = FE.recognize_formulas(st.session_state.extracted_crops, mathargs, mathobjs)
-                                        # Optionally refine LaTeX using Gemini for weak outputs
-                                        try:
-                                            st.session_state.extracted_formulas = FE.refine_formulas_latex_with_gemini(
-                                                st.session_state.extracted_formulas,
-                                                st.session_state.extracted_crops,
-                                                max_calls=8
-                                            )
-                                        except Exception:
-                                            pass
-                                        st.session_state.extracted_formulas = FE.enrich_formulas_with_descriptions(st.session_state.extracted_formulas)
-                                        st.session_state.extraction_done = 'view'
-
-                            if st.session_state.extraction_done == True:
-                                if st.session_state.extracted_formulas is not None and st.session_state.output_dir is not None:
-                                    formulas = st.session_state.extracted_formulas
-                                    output_dir = st.session_state.output_dir
-
-                                    st.success(f"✓ Successfully extracted {len(formulas)} formulas!")
-                                    st.info(f"📁 All files saved to: **{output_dir}**")
-
-                                    st.subheader("📥 Download Extracted Formulas")
-
-                                    dl_col1, dl_col2 = st.columns(2)
-
-                                    with dl_col1:
-                                        pdf_file = os.path.join(output_dir, 'formulas_report.pdf')
-                                        if os.path.exists(pdf_file):
-                                            with open(pdf_file, 'rb') as f:
-                                                st.download_button(
-                                                    label="📄 PDF",
-                                                    data=f.read(),
-                                                    file_name="formulas_report.pdf",
-                                                    mime="application/pdf"
-                                                )
-
-                                    with dl_col2:
-                                        zip_file = os.path.join(output_dir, 'extracted_formulas.zip')
-                                        if os.path.exists(zip_file):
-                                            with open(zip_file, 'rb') as f:
-                                                st.download_button(
-                                                    label="📦 ZIP",
-                                                    data=f.read(),
-                                                    file_name="extracted_formulas.zip",
-                                                    mime="application/zip"
-                                                )
-
-                                    st.success("✓ All files are ready for download!")
-
-                            if st.session_state.extraction_done == 'view':
-                                if st.session_state.extracted_formulas is not None:
-                                    formulas = st.session_state.extracted_formulas
-
-                                    st.subheader("🔍 Extracted Formulas Details")
-
-                                    for formula in formulas:
-                                        with st.expander(f"📐 Formula #{formula['id']} (Confidence: {formula['confidence']:.4f})", expanded=False):
-                                            exp_col1, exp_col2 = st.columns(2)
-
-                                            with exp_col1:
-                                                st.write("**Formula Image:**")
-                                                coords = formula['coordinates']
-                                                crop_img = st.session_state.opencv_image[coords[1]:coords[3], coords[0]:coords[2]]
-                                                st.image(crop_img, use_column_width=True)
-                                                if 'description' in formula and formula['description']:
-                                                    st.write("**About this formula:**")
-                                                    st.write(formula['description'])
-
-                                            with exp_col2:
-                                                st.write("**LaTeX Formula:**")
-                                                st.code(formula['latex'], language='latex')
-                                                st.write("**Rendered:**")
-                                                render_latex_block(formula['latex'])
-                                                st.write(f"**Bounding Box:** {formula['coordinates']}")
-                        else:
-                            st.warning(f"No formulas detected on page {page_idx}.")
-
 
